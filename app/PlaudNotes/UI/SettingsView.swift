@@ -57,6 +57,7 @@ struct SettingsView: View {
                         ForEach(NoteLanguage.allCases) { Text($0.rawValue).tag($0) }
                     }
                     NavigationLink("管理範本") { TemplateListView() }
+                    NavigationLink("專有名詞詞庫") { GlossaryEditor() }
                 }
 
                 Section {

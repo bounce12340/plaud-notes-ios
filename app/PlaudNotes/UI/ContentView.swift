@@ -19,7 +19,7 @@ struct ContentView: View {
                         NavigationLink(value: item) {
                             VStack(alignment: .leading) {
                                 Text(item.title)
-                                Text(item.createdAt, style: .date)
+                                Text(item.noteDate, style: .date)
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }

@@ -13,7 +13,7 @@ enum TranscriptExporter {
         if let lang = transcript.languageCode { out += "- 語言：\(lang)\n" }
         out += "\n## 逐字稿\n\n"
         for s in transcript.segments {
-            let who = s.speaker.map { " \($0)" } ?? ""
+            let who = transcript.displayName(s.speaker).map { " \($0)" } ?? ""
             out += "**[\(timestamp(s.start))]\(who)**：\(s.text.trimmingCharacters(in: .whitespaces))\n\n"
         }
         return out

@@ -120,7 +120,12 @@ final class LLMTests: XCTestCase {
         XCTAssertTrue(user.contains("[00:00:00] 王經理：內容0"))
         XCTAssertTrue(user.contains("與會者：王經理、speaker_1"))
         XCTAssertTrue(user.contains("輸出語言：繁體中文（台灣）"))
+        XCTAssertTrue(user.contains("專有名詞（正確寫法）：Etihad、C2 Pharma"))
+        XCTAssertFalse(user.contains("{{"))
         XCTAssertEqual(llm.calls[0][0].role, .system)
+        // 系統指示必須禁止推測負責人與補年份
+        XCTAssertTrue(llm.calls[0][0].content.contains("不可推測某個代號是哪一位與會者"))
+        XCTAssertTrue(llm.calls[0][0].content.contains("原話沒有年份就不要補年份"))
     }
 
     func testGenerateMapReduce() async throws {
@@ -132,6 +137,8 @@ final class LLMTests: XCTestCase {
         let final = llm.calls.last![1].content
         XCTAssertTrue(final.contains("### 第 1 段重點"))
         XCTAssertTrue(final.contains("### 第 \(r.chunkCount) 段重點"))
+        // 分段抽重點時也要帶詞庫
+        XCTAssertTrue(llm.calls[0][1].content.contains("專有名詞（正確寫法）：Etihad、C2 Pharma"))
     }
 
     private static func request(segments n: Int) -> NoteGenerator.Request {
@@ -143,9 +150,11 @@ final class LLMTests: XCTestCase {
             let text: String = "內容\(i)" + padding
             segs.append(TranscriptSegment(start: start, end: start + 9, speaker: speaker, text: text))
         }
+        var transcript = Transcript(languageCode: "zho", segments: segs, engine: "test")
+        transcript.speakerNames = ["speaker_0": "王經理", "speaker_1": "  "]
         return .init(title: "週會", date: Date(timeIntervalSince1970: 1_790_000_000),
-                     transcript: Transcript(languageCode: "zho", segments: segs, engine: "test"),
+                     transcript: transcript,
                      template: NoteTemplate.builtIns[0], outputLanguage: NoteLanguage.zhTW.rawValue,
-                     speakerNames: ["speaker_0": "王經理"])
+                     glossary: ["Etihad", "C2 Pharma"])
     }
 }

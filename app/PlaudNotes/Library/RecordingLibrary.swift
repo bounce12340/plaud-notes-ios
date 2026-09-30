@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Observation
 
@@ -11,6 +12,11 @@ struct RecordingItem: Identifiable, Codable, Hashable, Sendable {
     let createdAt: Date
     let source: Source
     var durationSeconds: Double?
+    /// 實際錄音時間（匯入檔從音檔 metadata 或檔案建立時間取得）；舊資料為 nil
+    var recordedAt: Date? = nil
+
+    /// 筆記上的日期：優先用錄音時間，沒有才用加入 App 的時間
+    var noteDate: Date { recordedAt ?? createdAt }
 }
 
 /// 最小可用的錄音清單，存成 JSON。之後（M1）改用 SwiftData。
@@ -41,16 +47,29 @@ final class RecordingLibrary {
         let id = UUID()
         let ext = source.pathExtension.isEmpty ? "m4a" : source.pathExtension
         let dest = Self.recordingsDirectory.appending(path: "\(id.uuidString).\(ext)")
+        // 複製前先讀原檔建立時間（複製後的檔案時間是現在）
+        let fileDate = (try? source.resourceValues(forKeys: [.creationDateKey]))?.creationDate
         do {
             try FileManager.default.copyItem(at: source, to: dest)
             add(RecordingItem(id: id,
                               title: source.deletingPathExtension().lastPathComponent,
                               fileName: dest.lastPathComponent,
                               createdAt: .now,
-                              source: .imported))
+                              source: .imported,
+                              recordedAt: fileDate))
+            // 音檔內嵌的錄音時間（例如語音備忘錄的 creation_time）比檔案時間可靠，有的話就覆蓋
+            Task {
+                if let date = await AudioMetadata.creationDate(of: dest) { setRecordedAt(date, for: id) }
+            }
         } catch {
             lastError = "匯入失敗：\(error.localizedDescription)"
         }
+    }
+
+    func setRecordedAt(_ date: Date, for id: UUID) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].recordedAt = date
+        save()
     }
 
     func add(_ item: RecordingItem) {
@@ -114,5 +133,14 @@ final class RecordingLibrary {
         } catch {
             lastError = "儲存清單失敗：\(error.localizedDescription)"
         }
+    }
+}
+
+enum AudioMetadata {
+    /// 讀取音檔 metadata 的建立時間（QuickTime／MP4 的 creationDate）。
+    static func creationDate(of url: URL) async -> Date? {
+        let asset = AVURLAsset(url: url)
+        guard let item = try? await asset.load(.creationDate) else { return nil }
+        return try? await item.load(.dateValue)
     }
 }

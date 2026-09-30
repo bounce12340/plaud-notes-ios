@@ -12,8 +12,8 @@ struct NoteGenerator: Sendable {
         var template: NoteTemplate
         /// 筆記輸出語言，例如「繁體中文（台灣）」「English」「日本語」
         var outputLanguage: String
-        /// 說話者顯示名稱（speaker_0 → 王經理）；沒有對應就用原始 id
-        var speakerNames: [String: String] = [:]
+        /// 詞庫中的正確寫法（人名、藥名、公司名等）
+        var glossary: [String] = []
     }
 
     struct Result: Sendable {
@@ -29,10 +29,13 @@ struct NoteGenerator: Sendable {
     4. 專有名詞、產品名、法規名稱保留原文，必要時在括號加註譯名。
     5. 使用指定的輸出語言撰寫；若輸出語言是中文，一律使用台灣繁體中文與台灣用語。
     6. 只輸出筆記本身（Markdown），不要加前言或結語。
+    7. 說話者以逐字稿標示的名稱或代號（例如 speaker_0）稱呼。不可推測某個代號是哪一位與會者；逐字稿中被點名的人，只有在明確知道是誰時才寫進負責人，否則寫「未確認」。
+    8. 日期只照逐字稿原話寫：原話沒有年份就不要補年份，也不要把不同句子的月、日、年拼成一個日期。會議日期以「基本資訊」提供的為準。
+    9. 若有提供「專有名詞」清單，逐字稿中發音或拼寫相近的詞，請改用清單中的正確寫法。
     """
 
     func generate(_ req: Request) async throws -> Result {
-        let lines = Self.transcriptLines(req.transcript, names: req.speakerNames)
+        let lines = Self.transcriptLines(req.transcript)
         let chunks = Self.chunk(lines, limit: max(2_000, maxInputCharacters))
         let values = Self.values(for: req)
         let instructions = req.template.render(values)
@@ -47,6 +50,7 @@ struct NoteGenerator: Sendable {
         }
 
         // Map：逐段抽出重點（保留時間戳），依序執行以免超過供應商的速率限制
+        let glossaryLine = req.glossary.isEmpty ? "" : "\n專有名詞（正確寫法）：" + req.glossary.joined(separator: "、")
         var partials: [String] = []
         for (i, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
@@ -55,7 +59,7 @@ struct NoteGenerator: Sendable {
                 ChatMessage(role: .user, content: """
                 以下是一份長逐字稿的第 \(i + 1)/\(chunks.count) 段。請用\(req.outputLanguage)條列這一段的：
                 重點（附時間戳）、決議、待辦（含負責人與期限，如有提到）、重要數字與專有名詞、關鍵引述。
-                不要寫總結，也不要推測其他段落的內容。
+                不要寫總結，也不要推測其他段落的內容。\(glossaryLine)
 
                 逐字稿第 \(i + 1) 段：
                 \(chunk)
@@ -77,32 +81,33 @@ struct NoteGenerator: Sendable {
     // MARK: - 組 prompt
 
     static func values(for req: Request) -> [String: String] {
-        let speakers = req.transcript.speakers.map { req.speakerNames[$0] ?? $0 }
+        let speakers = req.transcript.speakers.compactMap { req.transcript.displayName($0) }
         return [
             "title": req.title,
             "date": req.date.formatted(.iso8601.year().month().day()),
             "speakers": speakers.isEmpty ? "未標示" : speakers.joined(separator: "、"),
             "language": req.transcript.languageCode ?? "未知",
             "output_language": req.outputLanguage,
+            "glossary": req.glossary.joined(separator: "、"),
         ]
     }
 
     static func finalPrompt(instructions: String, values: [String: String], body: String) -> String {
-        """
+        var s = """
         \(instructions)
 
         輸出語言：\(values["output_language"] ?? "繁體中文（台灣）")
-
-        \(body)
         """
+        if let g = values["glossary"], !g.isEmpty { s += "\n專有名詞（正確寫法）：\(g)" }
+        return s + "\n\n" + body
     }
 
-    /// 逐字稿轉成「[hh:mm:ss] 說話者：內容」一行一段。
-    static func transcriptLines(_ t: Transcript, names: [String: String]) -> [String] {
+    /// 逐字稿轉成「[hh:mm:ss] 說話者：內容」一行一段（說話者使用設定的名稱）。
+    static func transcriptLines(_ t: Transcript) -> [String] {
         t.segments.compactMap { s in
             let text = s.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }
-            let who = s.speaker.map { names[$0] ?? $0 }.map { "\($0)：" } ?? ""
+            let who = t.displayName(s.speaker).map { "\($0)：" } ?? ""
             return "[\(TranscriptExporter.timestamp(s.start))] \(who)\(text)"
         }
     }

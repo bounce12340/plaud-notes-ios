@@ -9,10 +9,11 @@
 - ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示、分享 Markdown
 - 簡→繁：OpenCC 1.4.2 字典（`PlaudNotes/Resources/OpenCC`，Apache-2.0）
 - LLM 筆記：多供應商、可自訂範本、輸出語言（翻譯）、長逐字稿分段
+- 說話者改名、專有名詞詞庫（轉錄 keyterms＋自動更正＋筆記）、以錄音日期產生筆記
 - 單元測試：ElevenLabs 解析、OpenCC 官方案例、LLM 請求／回應、範本與分段
 
 ## 尚未包含
-Share Extension、長音檔分段上傳與續跑、本機轉錄（WhisperKit／FluidAudio）、說話者改名、docx。
+Share Extension、長音檔分段上傳與續跑、本機轉錄（WhisperKit／FluidAudio）、docx。
 
 ## 在 Mac mini 上建置
 ```bash

@@ -4,6 +4,7 @@ struct RecordingDetailView: View {
     @Environment(RecordingLibrary.self) private var library
     @Environment(AppSettings.self) private var settings
     @Environment(TemplateStore.self) private var templates
+    @Environment(GlossaryStore.self) private var glossary
     let item: RecordingItem
 
     private enum Tab: String, CaseIterable { case transcript = "逐字稿", notes = "筆記" }
@@ -18,6 +19,7 @@ struct RecordingDetailView: View {
     @State private var error: String?
     @State private var confirmUpload = false
     @State private var confirmLLM = false
+    @State private var editingSpeakers = false
 
     var body: some View {
         List {
@@ -45,6 +47,16 @@ struct RecordingDetailView: View {
                             titleVisibility: .visible) {
             Button("上傳並轉錄") { Task { await transcribe() } }
         }
+        .sheet(isPresented: $editingSpeakers) {
+            if let t = transcript {
+                SpeakerNamesEditor(transcript: t) { names in
+                    var updated = t
+                    updated.speakerNames = names
+                    transcript = updated
+                    library.saveTranscript(updated, for: item)
+                }
+            }
+        }
         .confirmationDialog("逐字稿會傳送到 \(settings.llm.host)（\(settings.llm.model)）整理成筆記。",
                             isPresented: $confirmLLM, titleVisibility: .visible) {
             Button("傳送並產生筆記") { Task { await generateNotes() } }
@@ -64,9 +76,16 @@ struct RecordingDetailView: View {
             }
             Button(transcript == nil ? "開始轉錄" : "重新轉錄") { confirmUpload = true }
                 .disabled(busy != nil)
+            if !glossary.entries.isEmpty {
+                Text("會使用詞庫中的 \(glossary.entries.count) 個專有名詞（ElevenLabs 另收 20% 轉錄費）")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         if let transcript {
             Section {
+                if !transcript.speakers.isEmpty {
+                    Button("說話者名稱（\(transcript.speakers.count) 位）") { editingSpeakers = true }
+                }
                 if let mode = settings.chineseConversion.mode {
                     Button("重新套用簡→繁（\(mode.rawValue)）") { reconvert(mode) }
                         .disabled(busy != nil)
@@ -79,7 +98,7 @@ struct RecordingDetailView: View {
             Section("逐字稿") {
                 ForEach(Array(transcript.segments.enumerated()), id: \.offset) { _, s in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(TranscriptExporter.timestamp(s.start)) \(s.speaker ?? "")")
+                        Text("\(TranscriptExporter.timestamp(s.start)) \(transcript.displayName(s.speaker) ?? "")")
                             .font(.caption).foregroundStyle(.secondary)
                         Text(s.text).textSelection(.enabled)
                     }
@@ -99,11 +118,15 @@ struct RecordingDetailView: View {
             Picker("輸出語言", selection: $noteLanguage) {
                 ForEach(NoteLanguage.allCases) { Text($0.rawValue).tag($0) }
             }
+            LabeledContent("錄音日期", value: item.noteDate.formatted(date: .abbreviated, time: .shortened))
             LabeledContent("模型", value: settings.llm.model.isEmpty ? "未設定" : "\(settings.llm.model)（\(settings.llm.host)）")
             Button(notes == nil ? "產生筆記" : "重新產生") { confirmLLM = true }
                 .disabled(transcript == nil || busy != nil)
             if transcript == nil {
                 Text("請先完成轉錄。").font(.caption).foregroundStyle(.secondary)
+            } else if let t = transcript, t.speakers.contains(where: { t.displayName($0) == $0 }) {
+                Text("建議先到「逐字稿」設定說話者名稱，筆記才能寫出正確的負責人。")
+                    .font(.caption).foregroundStyle(.orange)
             }
         }
         if let notes {
@@ -141,7 +164,11 @@ struct RecordingDetailView: View {
             let provider = ElevenLabsProvider(apiKey: key)
             var t = try await provider.transcribe(
                 fileURL: library.url(for: item),
-                options: TranscriptionOptions(languageCode: language == "auto" ? nil : language))
+                options: TranscriptionOptions(languageCode: language == "auto" ? nil : language,
+                                              keyterms: glossary.entries.map(\.term)))
+            t = Glossary.apply(to: t, entries: glossary.entries)
+            // 重新轉錄時保留已設定的說話者名稱
+            t.speakerNames = transcript?.speakerNames
             if let mode = settings.chineseConversion.mode {
                 busy = "簡→繁轉換中…"
                 t = await Self.convert(t, mode: mode)
@@ -184,9 +211,10 @@ struct RecordingDetailView: View {
                                                    apiKey: KeychainStore.get(config.keychainAccount))
             let generator = NoteGenerator(client: client, maxInputCharacters: config.maxInputCharacters)
             let outLang = noteLanguage == .sameAsSource ? "與逐字稿相同的語言" : noteLanguage.rawValue
-            let result = try await generator.generate(.init(title: item.title, date: item.createdAt,
+            let result = try await generator.generate(.init(title: item.title, date: item.noteDate,
                                                             transcript: transcript, template: template,
-                                                            outputLanguage: outLang))
+                                                            outputLanguage: outLang,
+                                                            glossary: glossary.entries.map(\.term)))
             var md = result.markdown
             // 中文輸出再過一次簡→繁，避免模型混入簡體字
             if noteLanguage == .zhTW, let mode = settings.chineseConversion.mode,
