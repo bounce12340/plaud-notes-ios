@@ -1,0 +1,327 @@
+[
+ {
+  "id": "case_014",
+  "input": "高剂量的苦瓜素还会抑制胚胎发育",
+  "expected": "高劑量的苦瓜素還會抑制胚胎發育"
+ },
+ {
+  "id": "s2t_ximian",
+  "input": "细面 宽面 油泼面 臊子面 裤带面 重庆小面 肉酱面 酸菜鱼面 肥肠面 炒码面 牛腩面 牛筋面 三鲜面 番茄面 羊肉面 猪肉面 卤肉面 鲁肉面 虾球面 虾仁面 拉揸面 杂烩面 拉杂面 嗱喳面 强棒面 酱面 葱油面 油酱面 焖面 焗面 焗猪扒面 猫耳面 削筋面 浆水面 拨鱼面 刀拨面 银丝面 菠菜面 黄鱼面 大肠面 焖肉面 大排面 腰花面 咖喱面 麻辣面 酸辣面 火鸡面 锅烧面 切仔面 卤味面 炒鳝面 沾面 手工面 出前一丁面 意大利面",
+  "expected": "細麵 寬麵 油潑麵 臊子麵 褲帶麵 重慶小麵 肉醬麵 酸菜魚麵 肥腸麵 炒碼麵 牛腩麵 牛筋麵 三鮮麵 番茄麵 羊肉麵 豬肉麵 滷肉麵 魯肉麵 蝦球麵 蝦仁麵 拉揸麵 雜燴麵 拉雜麵 嗱喳麵 強棒麵 醬麵 蔥油麵 油醬麵 燜麵 焗麵 焗豬扒麵 貓耳麵 削筋麵 漿水麵 撥魚麵 刀撥麵 銀絲麵 菠菜麵 黃魚麵 大腸麵 燜肉麵 大排麵 腰花麵 咖喱麵 麻辣麵 酸辣麵 火雞麵 鍋燒麵 切仔麵 滷味麵 炒鱔麵 沾麵 手工麵 出前一丁麵 意大利麵"
+ },
+ {
+  "id": "case_027",
+  "input": "着装污染虚伪发泄棱柱群众里面",
+  "expected": "著裝汙染虛偽發洩稜柱群眾裡面"
+ },
+ {
+  "id": "case_028",
+  "input": "鲶鱼和鲇鱼是一种生物。",
+  "expected": "鯰魚和鯰魚是一種生物。"
+ },
+ {
+  "id": "case_056_x2x",
+  "input": "舒芙蕾 梳芙厘",
+  "expected": "舒芙蕾 梳芙厘"
+ },
+ {
+  "id": "case_057_s2x",
+  "input": "刚构式桥梁 鼻梁 顶梁柱 结梁子 悬梁刺股 偷梁换柱 跳梁小丑 栋梁之材 余音绕梁 梁父吟 梁惠王 谷梁传 张栋梁 蒋国梁 杨士梁",
+  "expected": "剛構式橋梁 鼻梁 頂梁柱 結梁子 懸梁刺股 偷梁換柱 跳梁小丑 棟梁之材 餘音繞梁 梁父吟 梁惠王 穀梁傳 張棟樑 蔣國樑 楊士樑"
+ },
+ {
+  "id": "case_060_s2x",
+  "input": "幺麽小丑 小丑丫鬟",
+  "expected": "么麼小丑 小丑丫鬟"
+ },
+ {
+  "id": "case_063_s2x",
+  "input": "赛后复盘 覆盘难照",
+  "expected": "賽後復盤 覆盤難照"
+ },
+ {
+  "id": "case_065_s2x",
+  "input": "这周复习 那周开会 若干周后 周线图 这周围 那周围 这周边 那周边 这周遭 那周遭 若干周边设备",
+  "expected": "這週複習 那週開會 若干週後 週線圖 這周圍 那周圍 這周邊 那周邊 這周遭 那周遭 若干周邊設備"
+ },
+ {
+  "id": "case_067_s2x",
+  "input": "几周之后 过几周 好几周 十几周 几十周 这几周 那几周 哪几周 第几周 多少周 几周围 多少周边产品 茶几周围",
+  "expected": "幾週之後 過幾週 好幾週 十幾週 幾十週 這幾週 那幾週 哪幾週 第幾週 多少週 幾周圍 多少周邊產品 茶几周圍"
+ },
+ {
+  "id": "ByVoid_OpenCC_Issue950_AlgorithmConversion",
+  "input": "算法",
+  "expected": "算法"
+ },
+ {
+  "id": "ByVoid_OpenCC_Issue950_AlgorithmConversionRev",
+  "input": "演算法",
+  "expected": "演算法"
+ },
+ {
+  "id": "nVidia_naming_s2t",
+  "input": "英伟达",
+  "expected": "英偉達"
+ },
+ {
+  "id": "medical_terms_tw_s2twp",
+  "input": "前列腺癌、抑郁症、胰腺炎是常见疾病",
+  "expected": "前列腺癌、抑鬱症、胰腺炎是常見疾病"
+ },
+ {
+  "id": "medical_phrases_tw_s2twp",
+  "input": "乙肝患者服用阿司匹林、他汀类和阻滞剂后，白细胞与红细胞计数恢复正常",
+  "expected": "乙肝患者服用阿司匹林、他汀類和阻滯劑後，白細胞與紅細胞計數恢復正常"
+ },
+ {
+  "id": "medical_phrases_tw_neuro_s2twp",
+  "input": "阿尔茨海默症、帕金森病和多动症的诊断需要计算机断层，代谢综合征也很常见",
+  "expected": "阿爾茨海默症、帕金森病和多動症的診斷需要計算機斷層，代謝綜合徵也很常見"
+ },
+ {
+  "id": "medical_phrases_tw_acetaminophen_s2twp",
+  "input": "对乙酰氨基酚和扑热息痛都是常用的退烧止痛药",
+  "expected": "對乙酰氨基酚和撲熱息痛都是常用的退燒止痛藥"
+ },
+ {
+  "id": "medical_phrases_tw_hepatitis_s2twp",
+  "input": "乙肝和丙肝患者要定期追蹤",
+  "expected": "乙肝和丙肝患者要定期追蹤"
+ },
+ {
+  "id": "medical_phrases_tw_ultrasound_s2twp",
+  "input": "超声波检查、B超和彩超都是常用的影像检查",
+  "expected": "超聲波檢查、B超和彩超都是常用的影像檢查"
+ },
+ {
+  "id": "dioxin_terms_tw_s2twp",
+  "input": "二𫫇英（也作二恶英）是一类公认的剧毒、持久性环境污染物",
+  "expected": "二噁英（也作二噁英）是一類公認的劇毒、持久性環境汙染物"
+ },
+ {
+  "id": "hantavirus_s2twp",
+  "input": "汉坦病毒",
+  "expected": "漢坦病毒"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_475",
+  "input": "元数据 元數據 调制 调制解调器",
+  "expected": "元數據 元數據 調製 調製解調器"
+ },
+ {
+  "id": "variants_tw_s2twp",
+  "input": "社區 所罗门群岛 复选框 复选按钮",
+  "expected": "社區 所羅門群島 複選框 複選按鈕"
+ },
+ {
+  "id": "BYVoid_OpenCC_PR_447_s2x",
+  "input": "拜访吃茶小舖和纯吃茶",
+  "expected": "拜訪喫茶小舖和純喫茶"
+ },
+ {
+  "id": "BYVoid_OpenCC_PR_1369_s2x",
+  "input": "郭台铭 郭台成 龙应台 今周刊 爱丽舍 爱丽舍宫",
+  "expected": "郭台銘 郭台成 龍應台 今周刊 愛麗舍 愛麗舍宮"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_914",
+  "input": "别强 彆強",
+  "expected": "別強 彆強"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_585",
+  "input": "妆发",
+  "expected": "妝髮"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_582",
+  "input": "倒霉",
+  "expected": "倒霉"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_580",
+  "input": "去干扰",
+  "expected": "去干擾"
+ },
+ {
+  "id": "console_stays_unchanged",
+  "input": "控制台",
+  "expected": "控制台"
+ },
+ {
+  "id": "stardew_valley",
+  "input": "星露谷物语",
+  "expected": "星露谷物語"
+ },
+ {
+  "id": "mobile_data_s2twp",
+  "input": "移动数据",
+  "expected": "移動數據"
+ },
+ {
+  "id": "big_data_s2twp",
+  "input": "大数据",
+  "expected": "大數據"
+ },
+ {
+  "id": "hk_place_connaught_road",
+  "input": "干诺道",
+  "expected": "干諾道"
+ },
+ {
+  "id": "hk_place_quarry_bay",
+  "input": "鲗鱼涌",
+  "expected": "鰂魚涌"
+ },
+ {
+  "id": "obama_s2twp",
+  "input": "奥巴马",
+  "expected": "奧巴馬"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_backpack",
+  "input": "背包",
+  "expected": "背包"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_1001_nian_fo",
+  "input": "念佛",
+  "expected": "念佛"
+ },
+ {
+  "id": "nk2028_opencc-js_Issue_37",
+  "input": "低级别产品",
+  "expected": "低級別產品"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_531_tongguo",
+  "input": "本次会议一致通过。",
+  "expected": "本次會議一致通過。"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_neijuan_s2t",
+  "input": "内卷",
+  "expected": "內捲"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_943_s2t",
+  "input": "失之毫厘谬以千里 立方厘米",
+  "expected": "失之毫釐謬以千里 立方釐米"
+ },
+ {
+  "id": "zipper_s2t",
+  "input": "拉链 拉链工程",
+  "expected": "拉鏈 拉鏈工程"
+ },
+ {
+  "id": "deleted_14-character_phrases_s2t",
+  "input": "但得一片橘皮吃且莫忘了洞庭湖 先天下之忧而忧后天下之乐而乐 在天愿做比翼鸟在地愿做连理枝 摇车儿里的爷爷拄拐棍儿的孙子 有意栽花花不发无心插柳柳成阴 有缘千里来相会无缘对面不相逢 濒危野生动植物种国际贸易公约 酒逢知己千锺少话不投机半句多 长江后浪催前浪一代新人换旧人",
+  "expected": "但得一片橘皮吃且莫忘了洞庭湖 先天下之憂而憂後天下之樂而樂 在天願做比翼鳥在地願做連理枝 搖車兒裡的爺爺拄柺棍兒的孫子 有意栽花花不發無心插柳柳成陰 有緣千里來相會無緣對面不相逢 瀕危野生動植物種國際貿易公約 酒逢知己千鍾少話不投機半句多 長江後浪催前浪一代新人換舊人"
+ },
+ {
+  "id": "namibia_s2twp",
+  "input": "纳米比亚",
+  "expected": "納米比亞"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_645",
+  "input": "华氏巨球蛋白血症 高钠血症最常见的原因是失水后未得到补充",
+  "expected": "華氏巨球蛋白血症 高鈉血症最常見的原因是失水後未得到補充"
+ },
+ {
+  "id": "fruit_dried_phrases_s2t",
+  "input": "葡萄干 芒果干 香蕉干 苹果干 草莓干 凤梨干 柿干 桃干 杏干 洋李干 梅干 无花果干 龙眼干 荔枝干 橄榄干 金桔干 山楂干 椰子干 榴莲干 榴梿干 奇异果干 百香果干 冻干猫粮",
+  "expected": "葡萄乾 芒果乾 香蕉乾 蘋果乾 草莓乾 鳳梨乾 柿乾 桃乾 杏乾 洋李乾 梅乾 無花果乾 龍眼乾 荔枝乾 橄欖乾 金桔乾 山楂乾 椰子乾 榴蓮乾 榴槤乾 奇異果乾 百香果乾 凍乾貓糧"
+ },
+ {
+  "id": "BYVoid_OpenCC_PR_1248_niu_ji_tong_zao",
+  "input": "牛骥同皁 牛骥同皂 牛骥同一皁 牛骥同一皂",
+  "expected": "牛驥同皁 牛驥同皁 牛驥同一皁 牛驥同一皁"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_930",
+  "input": "狸猫 狸貓 貍貓",
+  "expected": "狸貓 狸貓 貍貓"
+ },
+ {
+  "id": "BYVoid_OpenCC_PR_1266_zhou",
+  "input": "甲胄 甲冑",
+  "expected": "甲冑 甲冑"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_722",
+  "input": "抬头 擡头 抬頭 擡頭",
+  "expected": "抬頭 擡頭 抬頭 擡頭"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_722_preexisting_s2t",
+  "input": "哄抬物价 抬出去 抬回来 抬杠 抬高身价",
+  "expected": "哄抬物價 抬出去 抬回來 抬槓 抬高身價"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_767_solace",
+  "input": "慰藉著受傷的心靈 慰藉着受伤的心灵",
+  "expected": "慰藉著受傷的心靈 慰藉著受傷的心靈"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_1288_acyl_group",
+  "input": "异烟碱酰酸",
+  "expected": "異菸鹼酰酸"
+ },
+ {
+  "id": "BYVoid_OpenCC_PR_461_jian_s2t",
+  "input": "中国曾把碱写作硷，只有可溶于水的无机碱才叫碱，现已不再区分",
+  "expected": "中國曾把鹼寫作硷，只有可溶於水的無機鹼才叫鹼，現已不再區分"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_1275_amino_acid_s2x",
+  "input": "氨基酸 丙氨酸 精氨酸 天冬酰胺 天门冬酰胺 天冬氨酸 天门冬氨酸 胱氨酸 谷氨酸 谷氨酰胺 甘氨酸 组氨酸 异亮氨酸 亮氨酸 赖氨酸 甲硫氨酸 苯丙氨酸 脯氨酸 丝氨酸 苏氨酸 色氨酸 酪氨酸 缬氨酸",
+  "expected": "氨基酸 丙氨酸 精氨酸 天冬酰胺 天門冬酰胺 天冬氨酸 天門冬氨酸 胱氨酸 穀氨酸 穀氨酰胺 甘氨酸 組氨酸 異亮氨酸 亮氨酸 賴氨酸 甲硫氨酸 苯丙氨酸 脯氨酸 絲氨酸 蘇氨酸 色氨酸 酪氨酸 纈氨酸"
+ },
+ {
+  "id": "chongqing_small_area_exception",
+  "input": "重庆小面积商铺",
+  "expected": "重慶小面積商鋪"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_506",
+  "input": "几率 機率 機會率 概率",
+  "expected": "幾率 機率 機會率 概率"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_941_chan_s2t",
+  "input": "铲子 铲刀 铲车 铲土 铲土机 铲雪 铲雪车 铲冰 铲球 飞铲 踢铲 铲倒 铲射 铲抢 反铲 铲板 铲起 铲除",
+  "expected": "鏟子 鏟刀 鏟車 鏟土 鏟土機 鏟雪 鏟雪車 鏟冰 鏟球 飛鏟 踢鏟 鏟倒 鏟射 鏟搶 反鏟 鏟板 鏟起 剷除"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_1397",
+  "input": "狄托、托津、大肃托、酒托、酒托儿、药托、药托儿，他的左手托着腮，右手托着茶托，思考着这些名字有什么共同之处",
+  "expected": "狄托、托津、大肅托、酒托、酒托兒、藥托、藥托兒，他的左手托著腮，右手托著茶托，思考著這些名字有什麼共同之處"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_1397_tuo_entrust_words",
+  "input": "信托、请托、属托、嘱托、交托、委托、托辞、托词、托之空言、受托、受人之托、所托非人、寄托、委托行、委托书、托物寓兴、依托、拜托、徒托空言、托梦、托附、托付、托管",
+  "expected": "信託、請託、屬託、囑託、交託、委託、託辭、託詞、託之空言、受託、受人之託、所託非人、寄託、委託行、委託書、託物寓興、依託、拜託、徒託空言、託夢、託附、託付、託管"
+ },
+ {
+  "id": "BYVoid_OpenCC_Issue_906_gu_default_and_phrases",
+  "input": "雇、雇佣、雇员、雇主、解雇、聘雇、劳雇关系",
+  "expected": "僱、僱傭、僱員、僱主、解僱、聘僱、勞僱關係"
+ },
+ {
+  "id": "director_names_all_modes",
+  "input": "克里斯托弗·诺兰 詹姆斯·卡梅隆 马丁·斯科塞斯 斯蒂芬·斯皮尔伯格",
+  "expected": "克里斯托弗·諾蘭 詹姆斯·卡梅隆 馬丁·斯科塞斯 斯蒂芬·斯皮爾伯格"
+ },
+ {
+  "id": "director_surname_nolan_all_modes",
+  "input": "诺兰的电影",
+  "expected": "諾蘭的電影"
+ },
+ {
+  "id": "producer_names_all_modes",
+  "input": "本·阿弗莱克 乔治·克鲁尼 布拉德·皮特 弗朗西丝·麦克多曼德 查尔斯·罗文",
+  "expected": "本·阿弗萊克 喬治·克魯尼 布拉德·皮特 弗朗西絲·麥克多曼德 查爾斯·羅文"
+ }
+]

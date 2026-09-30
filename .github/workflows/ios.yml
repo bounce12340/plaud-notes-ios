@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      live_llm:
+        description: "實際呼叫 DeepSeek（需 repo secret DEEPSEEK_API_KEY；只用虛構逐字稿）"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -51,6 +56,10 @@ jobs:
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
       - name: Build & test
         working-directory: app
+        env:
+          # 只有手動觸發且勾選 live_llm 才提供金鑰；push / pull_request 一律不帶（LiveLLMTests 會略過）。
+          # xcodebuild 會把 TEST_RUNNER_ 開頭的變數去掉前綴後傳給測試程序。
+          TEST_RUNNER_DEEPSEEK_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.DEEPSEEK_API_KEY || '' }}
         run: |
           set -o pipefail
           xcodebuild test \
@@ -58,8 +67,14 @@ jobs:
             -scheme PlaudNotes \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             CODE_SIGNING_ALLOWED=NO \
-            | tee build.log | grep -E 'error:|warning: .*Sendable|Test Suite|Executed|BUILD|\*\* ' || true
+            | tee build.log | grep -E 'error:|warning: .*Sendable|Test Suite|Executed|BUILD|\*\* |LIVE|skipped' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' build.log
+      - name: Upload live LLM log
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.live_llm
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-llm-log
+          path: app/build.log
       - name: Upload log on failure
         if: failure()
         uses: actions/upload-artifact@v4

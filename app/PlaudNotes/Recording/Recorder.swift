@@ -16,6 +16,7 @@ final class Recorder: NSObject {
     private var currentID = UUID()
     private var timer: Timer?
     private var interruptionObserver: NSObjectProtocol?
+    private var startedAt: Date?
 
     func start() async {
         guard state == .idle else { return }
@@ -41,6 +42,7 @@ final class Recorder: NSObject {
             let r = try AVAudioRecorder(url: url, settings: settings)
             guard r.record() else { throw RecorderError.failedToStart }
             recorder = r
+            startedAt = .now
             state = .recording
             startTimer()
             observeInterruptions()
@@ -76,7 +78,8 @@ final class Recorder: NSObject {
         return RecordingItem(id: currentID, title: "錄音 \(title)",
                              fileName: "\(currentID.uuidString).m4a",
                              createdAt: .now, source: .recorded,
-                             durationSeconds: duration)
+                             durationSeconds: duration,
+                             recordedAt: startedAt ?? .now)
     }
 
     private func startTimer() {

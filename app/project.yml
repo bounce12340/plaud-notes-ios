@@ -14,7 +14,12 @@ targets:
   PlaudNotes:
     type: application
     platform: iOS
-    sources: [PlaudNotes]
+    sources:
+      - path: PlaudNotes
+        excludes: ["Resources/OpenCC/**"]
+      # 資料夾參照：打包後保留 OpenCC/ 子資料夾（字典與授權檔）
+      - path: PlaudNotes/Resources/OpenCC
+        type: folder
     scheme:
       testTargets: [PlaudNotesTests]
     info:
@@ -27,6 +32,10 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: false
+        # 允許連到區網的自架 LLM（例如 http://mac-mini.local:11434）；網際網路仍強制 HTTPS
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: 用來連線到你在區域網路上自架的 AI 模型（例如 Mac mini 上的 Ollama）。
   PlaudNotesTests:
     type: bundle.unit-test
     platform: iOS

@@ -11,14 +11,33 @@ struct ElevenLabsProvider: TranscriptionProvider {
     var session: URLSession = .shared
 
     func transcribe(fileURL: URL, options: TranscriptionOptions) async throws -> Transcript {
-        var fields: [String: String] = [
-            "model_id": model,
-            "diarize": options.diarize ? "true" : "false",
-            "timestamps_granularity": "word",
-            "tag_audio_events": "false",
+        let request = try makeRequest(fileURL: fileURL, options: options)
+        let (data, response) = try await session.upload(for: request.urlRequest, from: request.body)
+        guard let http = response as? HTTPURLResponse else { throw ProviderError.badResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ProviderError.http(http.statusCode, String(decoding: data.prefix(300), as: UTF8.self))
+        }
+        return try Self.parse(data)
+    }
+
+    /// 表單欄位。`keyterms` 每個詞各送一個欄位（2026-09-30 實測：送 JSON 陣列會回 400）。
+    static func formFields(model: String, options: TranscriptionOptions) -> [(String, String)] {
+        var fields: [(String, String)] = [
+            ("model_id", model),
+            ("diarize", options.diarize ? "true" : "false"),
+            ("timestamps_granularity", "word"),
+            ("tag_audio_events", "false"),
         ]
-        if let lang = options.languageCode { fields["language_code"] = lang }
-        if let n = options.maxSpeakers { fields["num_speakers"] = String(n) }
+        if let lang = options.languageCode { fields.append(("language_code", lang)) }
+        if let n = options.maxSpeakers { fields.append(("num_speakers", String(n))) }
+        for term in Glossary.keyterms(from: options.keyterms) { fields.append(("keyterms", term)) }
+        return fields
+    }
+
+    struct PreparedRequest { let urlRequest: URLRequest; let body: Data }
+
+    func makeRequest(fileURL: URL, options: TranscriptionOptions) throws -> PreparedRequest {
+        let fields = Self.formFields(model: model, options: options)
 
         let boundary = UUID().uuidString
         var request = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!)
@@ -29,12 +48,7 @@ struct ElevenLabsProvider: TranscriptionProvider {
 
         let body = try Multipart.body(boundary: boundary, fields: fields,
                                       fileField: "file", fileURL: fileURL)
-        let (data, response) = try await session.upload(for: request, from: body)
-        guard let http = response as? HTTPURLResponse else { throw ProviderError.badResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            throw ProviderError.http(http.statusCode, String(decoding: data.prefix(300), as: UTF8.self))
-        }
-        return try Self.parse(data)
+        return PreparedRequest(urlRequest: request, body: body)
     }
 
     // MARK: - 回應解析（字詞 → 依說話者合併成段落）
@@ -89,10 +103,10 @@ enum ProviderError: LocalizedError {
 }
 
 enum Multipart {
-    static func body(boundary: String, fields: [String: String],
+    static func body(boundary: String, fields: [(String, String)],
                      fileField: String, fileURL: URL) throws -> Data {
         var d = Data()
-        for (k, v) in fields.sorted(by: { $0.key < $1.key }) {
+        for (k, v) in fields {
             d.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(k)\"\r\n\r\n\(v)\r\n")
         }
         let name = fileURL.lastPathComponent

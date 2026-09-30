@@ -1,4 +1,4 @@
-# Plaud Notes（iOS App）開發規格 v0.6（草案）
+# Plaud Notes（iOS App）開發規格 v0.8（草案）
 
 > Repo：github.com/bounce12340/plaud-notes-ios（私人）
 > 日期：2026-09-30
@@ -168,6 +168,28 @@
 - **第一份樣本**：樣本 A（`sample_a.m4a`）（語音備忘錄，24 分鐘）；**不進 repo**。
 
 ---
+
+### 5.3 已實作（2026-09-30，v0.7）
+- **簡→繁（F4）**：Swift 移植 OpenCC 1.4.2 `s2tw`／`s2twp`，字典（Apache-2.0，約 1.1 MB）打包在 App，完全離線。
+  - 預設 `s2tw`（只轉字形）；`s2twp` 另轉台灣用語，但會把「文件」轉成「檔案」，會議內容易誤轉，列為選項。
+  - 只轉「含漢字且不含假名、韓文」的段落，避免把日文漢字（国→國）誤轉。
+  - 已知行為：已是繁體的「台」會轉成「臺」（OpenCC 標準）。
+  - 驗證：參考實作（Python）與 Swift 單元測試皆使用 OpenCC 官方 testcases 的 85 筆 s2twp、65 筆 s2tw 案例。
+- **LLM 筆記（F6、F7、F9）**：
+  - 供應商：OpenAI 相容（DeepSeek、OpenAI、Gemini、Groq、OpenRouter、Ollama 自架 gpt-oss、自訂）與 Anthropic；Base URL、模型、API key（Keychain）可自訂，附連線測試。
+  - 範本：內建會議記錄／訪談／講座／一般摘要，可複製後修改或新增；變數 `{{title}}` `{{date}}` `{{speakers}}` `{{language}}` `{{output_language}}`。
+  - 翻譯：選擇筆記輸出語言（繁中／英／日／韓／同原文），例如英文會議直接產生中文筆記。
+  - 長逐字稿：超過「單次送出上限」時分段抽重點再合併（map-reduce）。
+  - 送出前顯示目的地主機與模型並需確認；中文筆記輸出後再過一次簡→繁。
+  - 區網自架：Info.plist 設 `NSAllowsLocalNetworking`，只放行區網 HTTP；網際網路仍強制 HTTPS。
+- **DeepSeek 首次實測（2026-09-30）**：樣本 A（24 分鐘、英文為主、逐字稿約 2.3 萬字）用 deepseek-flash 一次整理約 50 秒、尖峰估約 US$0.018；關鍵數字與人名抽查皆有逐字稿依據。發現三個問題：把 speaker 代號推測成人名、把沒講年份的日期補上年份、ASR 錯字照抄；且筆記日期用了匯入時間。分 4 段 map-reduce 版較冗長、待確認較多，故 1M context 模型優先一次送出。
+- **v0.8 修正**：
+  - 說話者改名：逐字稿頁設定 speaker_0 → 真實姓名（附每位第一段發言供辨認），逐字稿顯示、Markdown 匯出、筆記都使用；重新轉錄保留名稱。
+  - 專有名詞詞庫：設定頁一行一詞，可寫「錯誤 => 正確」。用於 ElevenLabs `keyterms`（每詞一個表單欄位，2026-09-30 實測 JSON 陣列會 400；另收 20% 轉錄費；不合規格的詞不送）、轉錄後自動更正、筆記 prompt。
+  - 錄音日期：App 錄音記錄開始時間；匯入檔先取檔案建立時間，再以音檔容器記錄的建立時間（AVAsset creationDate）覆蓋；筆記 `{{date}}` 用錄音日期。**未驗證**：語音備忘錄分享出來的檔案，容器時間是「錄音時間」還是「分享／匯出時間」（樣本 A 的 creation_time 與上傳時間只差約 1 分鐘，可能是匯出時間），需用實機確認；因此提供**手動修改錄音時間與備註**（筆記頁點「錄音時間」）：手動時間不會被自動偵測覆蓋、可改回自動；備註會送給 LLM 當背景資訊，範本可用 `{{remark}}`。
+  - 系統指示新增：不可推測代號是誰（負責人不明寫「未確認」）、日期照原話不補年份、依詞庫改正拼寫。
+- **實際呼叫 LLM 的整合測試**：`LiveLLMTests` 以虛構逐字稿經 App 的 Swift 客戶端呼叫 DeepSeek；只在手動觸發 CI 並勾選 `live_llm` 時提供 repo secret `DEEPSEEK_API_KEY`，push／PR 自動略過。
+- **未完成**：串流輸出、筆記 docx 匯出、長音檔分段上傳。
 
 ## 9. 待確認事項
 1. Plaud：請到 Plaud Web（電腦瀏覽器 web.plaud.ai）打開同一筆錄音，看有沒有「匯出音訊」；另提供 Plaud App 版本和訂閱方案。
