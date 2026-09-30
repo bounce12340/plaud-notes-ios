@@ -129,7 +129,8 @@ final class GlossaryAndSpeakerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         let before = Date()
         try await TestAudio.writeSilentM4A(to: url, creationDate: Date(timeIntervalSince1970: 1_790_000_000))
-        let got = try XCTUnwrap(await AudioMetadata.creationDate(of: url))
+        let read = await AudioMetadata.creationDate(of: url)
+        let got = try XCTUnwrap(read)
         XCTAssertEqual(got.timeIntervalSince1970, before.timeIntervalSince1970, accuracy: 60)
     }
 }
