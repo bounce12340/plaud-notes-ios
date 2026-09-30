@@ -2,14 +2,14 @@ import Foundation
 import Observation
 
 /// 筆記範本。`prompt` 可用變數：
-/// `{{title}}` `{{date}}` `{{speakers}}` `{{language}}` `{{output_language}}`；逐字稿會另外附在後面。
+/// `{{title}}` `{{date}}` `{{speakers}}` `{{language}}` `{{output_language}}` `{{remark}}`；逐字稿會另外附在後面。
 struct NoteTemplate: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var name: String
     var prompt: String
     var isBuiltIn: Bool
 
-    static let variables = ["{{title}}", "{{date}}", "{{speakers}}", "{{language}}", "{{output_language}}"]
+    static let variables = ["{{title}}", "{{date}}", "{{speakers}}", "{{language}}", "{{output_language}}", "{{remark}}"]
 
     func render(_ values: [String: String]) -> String {
         var out = prompt

@@ -114,10 +114,38 @@ final class GlossaryAndSpeakerTests: XCTestCase {
         XCTAssertEqual(item.noteDate, recorded)
     }
 
+    @MainActor
+    func testRecordingInfoManualOverrideAndRemark() {
+        // 用獨立的暫存清單檔，不動到真正的資料
+        let lib = RecordingLibrary(indexURL: FileManager.default.temporaryDirectory
+            .appending(path: "lib-\(UUID().uuidString).json"))
+        let id = UUID()
+        lib.add(RecordingItem(id: id, title: "t", fileName: "none.m4a", createdAt: .now, source: .imported))
+        defer { if let it = lib.item(id: id) { lib.delete(it) } }
+        let manual = Date(timeIntervalSince1970: 1_789_000_000)
+        lib.updateInfo(id: id, recordedAt: manual, remark: "實際錄音 9/28")
+        // 自動偵測不可覆蓋手動設定
+        lib.setRecordedAt(Date(timeIntervalSince1970: 1_790_000_000), for: id)
+        XCTAssertEqual(lib.item(id: id)?.noteDate, manual)
+        XCTAssertEqual(lib.item(id: id)?.recordedAtIsManual, true)
+        XCTAssertEqual(lib.item(id: id)?.trimmedRemark, "實際錄音 9/28")
+    }
+
+    func testRemarkGoesIntoPrompt() {
+        let values = ["output_language": "繁體中文（台灣）", "glossary": "", "remark": "實際錄音 9/28"]
+        let p = NoteGenerator.finalPrompt(instructions: "X", values: values, body: "B")
+        XCTAssertTrue(p.contains("錄音備註（使用者提供，可作為背景資訊，優先於逐字稿推測）：實際錄音 9/28"))
+        XCTAssertFalse(NoteGenerator.finalPrompt(instructions: "X", values: ["remark": ""], body: "B").contains("錄音備註"))
+        let t = NoteTemplate(id: UUID(), name: "x", prompt: "備註：{{remark}}", isBuiltIn: false)
+        XCTAssertEqual(t.render(["remark": "9/28"]), "備註：9/28")
+    }
+
     func testOldRecordingItemJSONStillDecodes() throws {
         let old = #"{"id":"6B0F2E0A-0001-4000-8000-000000000009","title":"t","fileName":"f.m4a","createdAt":0,"source":"imported"}"#
         let item = try JSONDecoder().decode(RecordingItem.self, from: Data(old.utf8))
         XCTAssertNil(item.recordedAt)
+        XCTAssertNil(item.remark)
+        XCTAssertNil(item.recordedAtIsManual)
         XCTAssertEqual(item.noteDate, item.createdAt)
     }
 

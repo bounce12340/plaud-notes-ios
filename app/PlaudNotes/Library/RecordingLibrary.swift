@@ -14,9 +14,18 @@ struct RecordingItem: Identifiable, Codable, Hashable, Sendable {
     var durationSeconds: Double?
     /// 實際錄音時間（匯入檔從音檔 metadata 或檔案建立時間取得）；舊資料為 nil
     var recordedAt: Date? = nil
+    /// true 表示錄音時間由使用者手動設定，自動偵測不可覆蓋
+    var recordedAtIsManual: Bool? = nil
+    /// 使用者備註，例如「語音備忘錄分享時間，實際錄音為 9/29 下午」；會提供給筆記整理參考
+    var remark: String? = nil
 
     /// 筆記上的日期：優先用錄音時間，沒有才用加入 App 的時間
     var noteDate: Date { recordedAt ?? createdAt }
+
+    var trimmedRemark: String? {
+        let s = remark?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return s.isEmpty ? nil : s
+    }
 }
 
 /// 最小可用的錄音清單，存成 JSON。之後（M1）改用 SwiftData。
@@ -32,9 +41,12 @@ final class RecordingLibrary {
         return dir
     }()
 
-    private let indexURL = URL.documentsDirectory.appending(path: "library.json")
+    private let indexURL: URL
 
-    init() { load() }
+    init(indexURL: URL = URL.documentsDirectory.appending(path: "library.json")) {
+        self.indexURL = indexURL
+        load()
+    }
 
     func url(for item: RecordingItem) -> URL {
         Self.recordingsDirectory.appending(path: item.fileName)
@@ -66,10 +78,34 @@ final class RecordingLibrary {
         }
     }
 
+    func item(id: UUID) -> RecordingItem? { items.first { $0.id == id } }
+
+    /// 自動偵測到的錄音時間；使用者手動設定過就不覆蓋
     func setRecordedAt(_ date: Date, for id: UUID) {
-        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        guard let i = items.firstIndex(where: { $0.id == id }),
+              items[i].recordedAtIsManual != true else { return }
         items[i].recordedAt = date
         save()
+    }
+
+    /// 使用者手動設定錄音時間與備註
+    func updateInfo(id: UUID, recordedAt: Date, remark: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].recordedAt = recordedAt
+        items[i].recordedAtIsManual = true
+        items[i].remark = remark
+        save()
+    }
+
+    /// 改回自動偵測（重新讀取音檔容器時間）
+    func resetRecordedAt(id: UUID) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].recordedAtIsManual = false
+        let url = url(for: items[i])
+        save()
+        Task {
+            if let date = await AudioMetadata.creationDate(of: url) { setRecordedAt(date, for: id) }
+        }
     }
 
     func add(_ item: RecordingItem) {

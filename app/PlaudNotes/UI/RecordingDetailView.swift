@@ -20,6 +20,10 @@ struct RecordingDetailView: View {
     @State private var confirmUpload = false
     @State private var confirmLLM = false
     @State private var editingSpeakers = false
+    @State private var editingInfo = false
+
+    /// 清單中最新的資料（手動改日期／備註後會更新）
+    private var current: RecordingItem { library.item(id: item.id) ?? item }
 
     var body: some View {
         List {
@@ -46,6 +50,13 @@ struct RecordingDetailView: View {
         .confirmationDialog("音檔會上傳到 ElevenLabs 進行轉錄。", isPresented: $confirmUpload,
                             titleVisibility: .visible) {
             Button("上傳並轉錄") { Task { await transcribe() } }
+        }
+        .sheet(isPresented: $editingInfo) {
+            RecordingInfoEditor(item: current) { date, remark in
+                library.updateInfo(id: item.id, recordedAt: date, remark: remark)
+            } onReset: {
+                library.resetRecordedAt(id: item.id)
+            }
         }
         .sheet(isPresented: $editingSpeakers) {
             if let t = transcript {
@@ -118,7 +129,15 @@ struct RecordingDetailView: View {
             Picker("輸出語言", selection: $noteLanguage) {
                 ForEach(NoteLanguage.allCases) { Text($0.rawValue).tag($0) }
             }
-            LabeledContent("錄音日期", value: item.noteDate.formatted(date: .abbreviated, time: .shortened))
+            Button {
+                editingInfo = true
+            } label: {
+                LabeledContent("錄音時間", value: current.noteDate.formatted(date: .abbreviated, time: .shortened)
+                               + (current.recordedAtIsManual == true ? "（手動）" : ""))
+            }
+            if let remark = current.trimmedRemark {
+                LabeledContent("備註", value: remark)
+            }
             LabeledContent("模型", value: settings.llm.model.isEmpty ? "未設定" : "\(settings.llm.model)（\(settings.llm.host)）")
             Button(notes == nil ? "產生筆記" : "重新產生") { confirmLLM = true }
                 .disabled(transcript == nil || busy != nil)
@@ -211,10 +230,12 @@ struct RecordingDetailView: View {
                                                    apiKey: KeychainStore.get(config.keychainAccount))
             let generator = NoteGenerator(client: client, maxInputCharacters: config.maxInputCharacters)
             let outLang = noteLanguage == .sameAsSource ? "與逐字稿相同的語言" : noteLanguage.rawValue
-            let result = try await generator.generate(.init(title: item.title, date: item.noteDate,
+            let info = current
+            let result = try await generator.generate(.init(title: info.title, date: info.noteDate,
                                                             transcript: transcript, template: template,
                                                             outputLanguage: outLang,
-                                                            glossary: glossary.entries.map(\.term)))
+                                                            glossary: glossary.entries.map(\.term),
+                                                            remark: info.trimmedRemark))
             var md = result.markdown
             // 中文輸出再過一次簡→繁，避免模型混入簡體字
             if noteLanguage == .zhTW, let mode = settings.chineseConversion.mode,

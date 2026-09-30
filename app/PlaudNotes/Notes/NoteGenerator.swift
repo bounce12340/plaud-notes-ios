@@ -14,6 +14,8 @@ struct NoteGenerator: Sendable {
         var outputLanguage: String
         /// 詞庫中的正確寫法（人名、藥名、公司名等）
         var glossary: [String] = []
+        /// 使用者對這份錄音的備註（例如實際錄音時間、場合）
+        var remark: String? = nil
     }
 
     struct Result: Sendable {
@@ -89,6 +91,7 @@ struct NoteGenerator: Sendable {
             "language": req.transcript.languageCode ?? "未知",
             "output_language": req.outputLanguage,
             "glossary": req.glossary.joined(separator: "、"),
+            "remark": req.remark ?? "",
         ]
     }
 
@@ -99,6 +102,7 @@ struct NoteGenerator: Sendable {
         輸出語言：\(values["output_language"] ?? "繁體中文（台灣）")
         """
         if let g = values["glossary"], !g.isEmpty { s += "\n專有名詞（正確寫法）：\(g)" }
+        if let r = values["remark"], !r.isEmpty { s += "\n錄音備註（使用者提供，可作為背景資訊，優先於逐字稿推測）：\(r)" }
         return s + "\n\n" + body
     }
 
