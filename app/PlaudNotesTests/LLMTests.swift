@@ -135,10 +135,13 @@ final class LLMTests: XCTestCase {
     }
 
     private static func request(segments n: Int) -> NoteGenerator.Request {
-        let segs = (0..<n).map {
-            TranscriptSegment(start: Double($0 * 10), end: Double($0 * 10 + 9),
-                              speaker: $0 % 2 == 0 ? "speaker_0" : "speaker_1",
-                              text: "內容\($0)" + String(repeating: "。", count: 40))
+        let padding = String(repeating: "。", count: 40)
+        var segs: [TranscriptSegment] = []
+        for i in 0..<n {
+            let start = Double(i) * 10
+            let speaker: String = i % 2 == 0 ? "speaker_0" : "speaker_1"
+            let text: String = "內容\(i)" + padding
+            segs.append(TranscriptSegment(start: start, end: start + 9, speaker: speaker, text: text))
         }
         return .init(title: "週會", date: Date(timeIntervalSince1970: 1_790_000_000),
                      transcript: Transcript(languageCode: "zho", segments: segs, engine: "test"),
