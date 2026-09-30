@@ -1,4 +1,4 @@
-# Plaud Notes（iOS App）開發規格 v0.6（草案）
+# Plaud Notes（iOS App）開發規格 v0.7（草案）
 
 > Repo：github.com/bounce12340/plaud-notes-ios（私人）
 > 日期：2026-09-30
@@ -168,6 +168,21 @@
 - **第一份樣本**：樣本 A（`sample_a.m4a`）（語音備忘錄，24 分鐘）；**不進 repo**。
 
 ---
+
+### 5.3 已實作（2026-09-30，v0.7）
+- **簡→繁（F4）**：Swift 移植 OpenCC 1.4.2 `s2tw`／`s2twp`，字典（Apache-2.0，約 1.1 MB）打包在 App，完全離線。
+  - 預設 `s2tw`（只轉字形）；`s2twp` 另轉台灣用語，但會把「文件」轉成「檔案」，會議內容易誤轉，列為選項。
+  - 只轉「含漢字且不含假名、韓文」的段落，避免把日文漢字（国→國）誤轉。
+  - 已知行為：已是繁體的「台」會轉成「臺」（OpenCC 標準）。
+  - 驗證：參考實作（Python）與 Swift 單元測試皆使用 OpenCC 官方 testcases 的 85 筆 s2twp、65 筆 s2tw 案例。
+- **LLM 筆記（F6、F7、F9）**：
+  - 供應商：OpenAI 相容（DeepSeek、OpenAI、Gemini、Groq、OpenRouter、Ollama 自架 gpt-oss、自訂）與 Anthropic；Base URL、模型、API key（Keychain）可自訂，附連線測試。
+  - 範本：內建會議記錄／訪談／講座／一般摘要，可複製後修改或新增；變數 `{{title}}` `{{date}}` `{{speakers}}` `{{language}}` `{{output_language}}`。
+  - 翻譯：選擇筆記輸出語言（繁中／英／日／韓／同原文），例如英文會議直接產生中文筆記。
+  - 長逐字稿：超過「單次送出上限」時分段抽重點再合併（map-reduce）。
+  - 送出前顯示目的地主機與模型並需確認；中文筆記輸出後再過一次簡→繁。
+  - 區網自架：Info.plist 設 `NSAllowsLocalNetworking`，只放行區網 HTTP；網際網路仍強制 HTTPS。
+- **未完成**：串流輸出、說話者改名 UI、筆記 docx 匯出、長音檔分段上傳。
 
 ## 9. 待確認事項
 1. Plaud：請到 Plaud Web（電腦瀏覽器 web.plaud.ai）打開同一筆錄音，看有沒有「匯出音訊」；另提供 Plaud App 版本和訂閱方案。

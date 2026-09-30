@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(RecordingLibrary.self) private var library
@@ -81,92 +80,5 @@ private struct RecorderSection: View {
 
     private func stop() {
         if let item = recorder.stop() { library.add(item) }
-    }
-}
-
-struct RecordingDetailView: View {
-    @Environment(RecordingLibrary.self) private var library
-    let item: RecordingItem
-    @State private var language = "auto"
-    @State private var transcript: Transcript?
-    @State private var working = false
-    @State private var error: String?
-
-    var body: some View {
-        List {
-            Section("轉錄（ElevenLabs）") {
-                Picker("語言", selection: $language) {
-                    Text("自動偵測").tag("auto")
-                    Text("中文").tag("zh")
-                    Text("英文").tag("en")
-                    Text("日文").tag("ja")
-                    Text("韓文").tag("ko")
-                }
-                Button(working ? "轉錄中…" : "開始轉錄") { Task { await run() } }
-                    .disabled(working)
-                Text("音檔會上傳到 ElevenLabs。").font(.caption).foregroundStyle(.secondary)
-                if let error { Text(error).foregroundStyle(.red) }
-            }
-            if let transcript {
-                Section("逐字稿") {
-                    ForEach(Array(transcript.segments.enumerated()), id: \.offset) { _, s in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(TranscriptExporter.timestamp(s.start)) \(s.speaker ?? "")")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Text(s.text)
-                        }
-                    }
-                }
-                Section {
-                    ShareLink(item: TranscriptExporter.markdown(title: item.title, transcript: transcript),
-                              preview: SharePreview("\(item.title).md"))
-                }
-            }
-        }
-        .navigationTitle(item.title)
-    }
-
-    private func run() async {
-        guard let key = KeychainStore.get("elevenlabs"), !key.isEmpty else {
-            error = ProviderError.missingAPIKey.localizedDescription; return
-        }
-        working = true; error = nil
-        defer { working = false }
-        do {
-            let provider = ElevenLabsProvider(apiKey: key)
-            transcript = try await provider.transcribe(
-                fileURL: library.url(for: item),
-                options: TranscriptionOptions(languageCode: language == "auto" ? nil : language))
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-}
-
-struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var elevenKey = ""
-    @State private var saved = false
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    SecureField("ElevenLabs API key", text: $elevenKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } header: { Text("轉錄服務") } footer: {
-                    Text("API key 只存在這台裝置的鑰匙圈，不會同步或寫入檔案。")
-                }
-                Button("儲存") {
-                    try? KeychainStore.set(elevenKey, for: "elevenlabs")
-                    saved = true
-                }
-                if saved { Text("已儲存").foregroundStyle(.secondary) }
-            }
-            .navigationTitle("設定")
-            .toolbar { Button("完成") { dismiss() } }
-            .onAppear { elevenKey = KeychainStore.get("elevenlabs") ?? "" }
-        }
     }
 }

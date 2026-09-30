@@ -59,9 +59,47 @@ final class RecordingLibrary {
     }
 
     func delete(_ item: RecordingItem) {
-        try? FileManager.default.removeItem(at: url(for: item))
+        let fm = FileManager.default
+        try? fm.removeItem(at: url(for: item))
+        try? fm.removeItem(at: transcriptURL(for: item))
+        try? fm.removeItem(at: notesURL(for: item))
         items.removeAll { $0.id == item.id }
         save()
+    }
+
+    // MARK: - 逐字稿與筆記（與音檔放在同一個資料夾）
+
+    func transcriptURL(for item: RecordingItem) -> URL {
+        Self.recordingsDirectory.appending(path: "\(item.id.uuidString).transcript.json")
+    }
+
+    func notesURL(for item: RecordingItem) -> URL {
+        Self.recordingsDirectory.appending(path: "\(item.id.uuidString).notes.md")
+    }
+
+    func loadTranscript(for item: RecordingItem) -> Transcript? {
+        guard let data = try? Data(contentsOf: transcriptURL(for: item)) else { return nil }
+        return try? JSONDecoder().decode(Transcript.self, from: data)
+    }
+
+    func saveTranscript(_ t: Transcript, for item: RecordingItem) {
+        do {
+            try JSONEncoder().encode(t).write(to: transcriptURL(for: item), options: [.atomic, .completeFileProtection])
+        } catch {
+            lastError = "儲存逐字稿失敗：\(error.localizedDescription)"
+        }
+    }
+
+    func loadNotes(for item: RecordingItem) -> String? {
+        try? String(contentsOf: notesURL(for: item), encoding: .utf8)
+    }
+
+    func saveNotes(_ md: String, for item: RecordingItem) {
+        do {
+            try Data(md.utf8).write(to: notesURL(for: item), options: [.atomic, .completeFileProtection])
+        } catch {
+            lastError = "儲存筆記失敗：\(error.localizedDescription)"
+        }
     }
 
     private func load() {

@@ -1,16 +1,18 @@
 # PlaudNotes iOS App（M1 骨架）
 
-**狀態：尚未編譯。** 這些 Swift 檔是在沒有 Xcode 的環境（iPhone 上的 iSH）寫的，請在 Mac mini 上建置後回報錯誤。
+**狀態：** 程式在沒有 Xcode 的環境撰寫，由 GitHub Actions（macOS 26／Xcode）編譯並在 iOS 模擬器跑單元測試；尚未在實機測試。
 
 ## 已包含
 - 錄音清單（JSON 暫存，之後改 SwiftData）
 - 從「檔案」匯入音檔（複製到 App 容器）
 - App 內建錄音：AAC M4A、48 kHz 單聲道、背景錄音、暫停／繼續、來電中斷處理
 - ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示、分享 Markdown
-- 單元測試：ElevenLabs 回應解析、時間戳格式
+- 簡→繁：OpenCC 1.4.2 字典（`PlaudNotes/Resources/OpenCC`，Apache-2.0）
+- LLM 筆記：多供應商、可自訂範本、輸出語言（翻譯）、長逐字稿分段
+- 單元測試：ElevenLabs 解析、OpenCC 官方案例、LLM 請求／回應、範本與分段
 
 ## 尚未包含
-Share Extension、分段與續跑、本機轉錄（WhisperKit／FluidAudio）、LLM 筆記、翻譯、docx。
+Share Extension、長音檔分段上傳與續跑、本機轉錄（WhisperKit／FluidAudio）、說話者改名、docx。
 
 ## 在 Mac mini 上建置
 ```bash

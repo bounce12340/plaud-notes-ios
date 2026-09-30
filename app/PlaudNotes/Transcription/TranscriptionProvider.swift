@@ -12,8 +12,17 @@ struct Transcript: Codable, Sendable {
     var languageCode: String?
     var segments: [TranscriptSegment]
     var engine: String
+    /// 套用過的後處理，例如 `opencc-s2tw`；nil 表示引擎原始輸出
+    var postProcessing: String? = nil
 
     var plainText: String { segments.map(\.text).joined() }
+
+    /// 出現過的說話者（依第一次出現順序）
+    var speakers: [String] {
+        var seen: [String] = []
+        for s in segments { if let sp = s.speaker, !seen.contains(sp) { seen.append(sp) } }
+        return seen
+    }
 }
 
 struct TranscriptionOptions: Sendable {
