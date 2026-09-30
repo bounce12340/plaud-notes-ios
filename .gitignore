@@ -1,0 +1,15 @@
+# Xcode
+app/*.xcodeproj/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# 錄音與逐字稿不可進 repo
+*.m4a
+*.wav
+*.mp3
+*.ogg
+*.opus
+bench/out/
+bench/ref/
+.env

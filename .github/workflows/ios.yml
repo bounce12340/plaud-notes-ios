@@ -1,0 +1,68 @@
+name: iOS build & test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench-scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax & CER smoke test
+        run: |
+          python3 -m py_compile bench/cer.py bench/elevenlabs_stt.py
+          printf '今天我們討論，預算。' > /tmp/r.txt
+          printf '今天我們討論預算' > /tmp/h.txt
+          python3 bench/cer.py /tmp/r.txt /tmp/h.txt --json | grep '"rate": 0.0'
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        working-directory: app
+        run: xcodegen generate
+      - name: Pick an iPhone simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[(k,x) for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          c.sort(key=lambda t:t[0])
+          print(c[-1][1]['udid'] if c else '')")
+          test -n "$UDID" || { xcrun simctl list devices available; exit 1; }
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+      - name: Build & test
+        working-directory: app
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project PlaudNotes.xcodeproj \
+            -scheme PlaudNotes \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E 'error:|warning: .*Sendable|Test Suite|Executed|BUILD|\*\* ' || true
+          grep -q '\*\* TEST SUCCEEDED \*\*' build.log
+      - name: Upload log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: app/build.log

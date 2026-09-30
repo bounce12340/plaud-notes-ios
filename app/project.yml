@@ -1,0 +1,35 @@
+name: PlaudNotes
+options:
+  bundleIdPrefix: com.example.plaudnotes   # 改成自己的反向網域
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: ""                     # 在 Xcode 裡選自己的 Team
+    CODE_SIGN_STYLE: Automatic
+targets:
+  PlaudNotes:
+    type: application
+    platform: iOS
+    sources: [PlaudNotes]
+    scheme:
+      testTargets: [PlaudNotesTests]
+    info:
+      path: PlaudNotes/Info.plist
+      properties:
+        CFBundleDisplayName: Plaud Notes
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: 用來錄製會議、訪談或講座，錄音只存在這台裝置上。
+        UIBackgroundModes: [audio]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: false
+  PlaudNotesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [PlaudNotesTests]
+    dependencies:
+      - target: PlaudNotes
