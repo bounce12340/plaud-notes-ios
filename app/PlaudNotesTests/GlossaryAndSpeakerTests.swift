@@ -121,13 +121,15 @@ final class GlossaryAndSpeakerTests: XCTestCase {
         XCTAssertEqual(item.noteDate, item.createdAt)
     }
 
-    func testAudioMetadataReadsCreationDate() async throws {
-        // 用 AVAssetWriter 寫一個含 creationDate 的短音檔，再讀回來
+    func testAudioMetadataReadsContainerCreationDate() async throws {
+        // AVURLAsset.creationDate 讀的是音檔容器（mvhd）記錄的建立時間。
+        // AVAssetWriter 會把它設成寫檔當下，所以預期讀回「寫檔時間」。
+        // （2026-09-30 CI 實測：自訂的 QuickTime creationDate metadata 項目不會被 m4a 採用。）
         let url = FileManager.default.temporaryDirectory.appending(path: "meta-\(UUID().uuidString).m4a")
         defer { try? FileManager.default.removeItem(at: url) }
-        let expected = Date(timeIntervalSince1970: 1_790_000_000)
-        try await TestAudio.writeSilentM4A(to: url, creationDate: expected)
-        let got = await AudioMetadata.creationDate(of: url)
-        XCTAssertEqual(try XCTUnwrap(got).timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 1)
+        let before = Date()
+        try await TestAudio.writeSilentM4A(to: url, creationDate: Date(timeIntervalSince1970: 1_790_000_000))
+        let got = try XCTUnwrap(await AudioMetadata.creationDate(of: url))
+        XCTAssertEqual(got.timeIntervalSince1970, before.timeIntervalSince1970, accuracy: 60)
     }
 }
