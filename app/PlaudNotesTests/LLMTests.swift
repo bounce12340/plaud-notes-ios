@@ -54,7 +54,8 @@ final class LLMTests: XCTestCase {
     // MARK: - 回應解析
 
     func testParseOpenAIResponse() throws {
-        let json = #"{"choices":[{"message":{"role":"assistant","content":"## 筆記","reasoning_content":"思考"}}]}"#
+        // 內容含 `"#`，要用 ##"…"## 才不會提早結束原始字串
+        let json = ##"{"choices":[{"message":{"role":"assistant","content":"## 筆記","reasoning_content":"思考"}}]}"##
         XCTAssertEqual(try OpenAICompatibleClient.parse(Data(json.utf8)), "## 筆記")
         XCTAssertThrowsError(try OpenAICompatibleClient.parse(Data(#"{"choices":[{"message":{"content":""}}]}"#.utf8)))
         XCTAssertThrowsError(try OpenAICompatibleClient.parse(Data("not json".utf8)))
