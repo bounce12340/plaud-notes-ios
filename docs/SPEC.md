@@ -1,4 +1,4 @@
-# Plaud Notes（iOS App）開發規格 v0.5（草案）
+# Plaud Notes（iOS App）開發規格 v0.6（草案）
 
 > Repo：github.com/bounce12340/plaud-notes-ios（私人）
 > 日期：2026-09-30
@@ -85,7 +85,11 @@
 | docx | shinjukunian/DocX；不足時自己產生 OOXML | MIT | 表格、標題、頁首要實測 |
 | 金鑰 | Keychain（僅本機，不同步） | — | |
 
-**授權原則**：未來要上架，因此**只採用 MIT／Apache-2.0**；GPL／AGPL（如 VoiceInk、riffado）只參考設計，不複製程式碼；沒有附授權的 repo 一律不使用。上架時在「設定 › 開源授權」列出所有授權聲明。
+**授權原則**（2026-09-30 更新）：
+- **本專案自有程式碼採 AGPL-3.0-only**（使用者要求：拿走程式碼的人必須公開自己的原始碼）。著作權人保留另行授權（含 App Store 發行）的權利。
+- **第三方相依只採用與 AGPL-3.0 相容、且不妨礙著作權人另行授權的授權**：MIT、Apache-2.0、BSD。**不引入 GPL／AGPL 的第三方程式碼**（例如 VoiceInk、riffado），否則著作權人會失去以其他條件發行 App 的彈性。沒有附授權的 repo 一律不使用。
+- **外部貢獻**需先同意貢獻者授權協議（CLA），才能合併。
+- App 內「設定 › 開源授權」列出本專案授權與所有第三方授權聲明。
 
 ---
 
