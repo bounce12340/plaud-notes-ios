@@ -101,8 +101,12 @@ struct RecordingDetailView: View {
                     Button("重新套用簡→繁（\(mode.rawValue)）") { reconvert(mode) }
                         .disabled(busy != nil)
                 }
-                ShareLink(item: TranscriptExporter.markdown(title: item.title, transcript: transcript),
-                          preview: SharePreview("\(item.title)-逐字稿.md"))
+                let md = TranscriptExporter.markdown(title: item.title, transcript: transcript)
+                ShareLink("分享 Markdown", item: md, preview: SharePreview("\(item.title)-逐字稿.md"))
+                ShareLink("分享 Word（.docx）",
+                          item: DocxFile(fileName: DocxFile.safeFileName("\(item.title)-逐字稿.docx"),
+                                         title: item.title, markdown: md),
+                          preview: SharePreview("\(item.title)-逐字稿.docx"))
             } footer: {
                 Text("引擎：\(transcript.engine)．語言：\(transcript.languageCode ?? "未知")．後處理：\(transcript.postProcessing ?? "無")")
             }
@@ -150,7 +154,11 @@ struct RecordingDetailView: View {
         }
         if let notes {
             Section {
-                ShareLink(item: notes, preview: SharePreview("\(item.title)-筆記.md"))
+                ShareLink("分享 Markdown", item: notes, preview: SharePreview("\(item.title)-筆記.md"))
+                ShareLink("分享 Word（.docx）",
+                          item: DocxFile(fileName: DocxFile.safeFileName("\(item.title)-筆記.docx"),
+                                         title: item.title, markdown: notes),
+                          preview: SharePreview("\(item.title)-筆記.docx"))
             }
             Section("筆記") {
                 Text(Self.renderMarkdown(notes))
@@ -159,7 +167,7 @@ struct RecordingDetailView: View {
         }
     }
 
-    /// 只解析粗體、連結等行內語法並保留換行；標題符號會原樣顯示（完整排版請分享 .md 檔）。
+    /// 只解析粗體、連結等行內語法並保留換行；標題符號會原樣顯示（完整排版請分享 .docx 或 .md 檔）。
     private static func renderMarkdown(_ md: String) -> AttributedString {
         (try? AttributedString(markdown: md, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(md)

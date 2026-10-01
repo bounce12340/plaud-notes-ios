@@ -69,6 +69,25 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | tee build.log | grep -E 'error:|warning: .*Sendable|Test Suite|Executed|BUILD|\*\* |LIVE|skipped' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' build.log
+      - name: Check sample .docx with macOS textutil
+        # DocxExporterTests 會在模擬器的暫存資料夾寫出範例檔；用 macOS 內建的 docx 讀取器再讀一次
+        run: |
+          set -euo pipefail
+          F=$(find ~/Library/Developer/CoreSimulator/Devices/${{ steps.sim.outputs.udid }} -name 'plaudnotes-docx-sample.docx' -print -quit)
+          test -n "$F" || { echo "找不到範例 .docx"; exit 1; }
+          cp "$F" docx-sample.docx
+          python3 -c "import zipfile; z = zipfile.ZipFile('docx-sample.docx'); assert z.testzip() is None; print(z.namelist())"
+          textutil -convert txt -encoding UTF-8 -stdout docx-sample.docx | tee docx-sample.txt
+          for s in '會議記錄：A & B <C> 合作案' '寄出報價' '未提及' '日本語テキスト' '由 test-model 產生。'; do
+            grep -qF "$s" docx-sample.txt || { echo "textutil 輸出缺少：$s"; exit 1; }
+          done
+      - name: Upload sample .docx
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docx-sample
+          path: docx-sample.docx
+          if-no-files-found: ignore
       - name: Upload live LLM log
         if: always() && github.event_name == 'workflow_dispatch' && inputs.live_llm
         uses: actions/upload-artifact@v4
