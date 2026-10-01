@@ -6,14 +6,15 @@
 - 錄音清單（JSON 暫存，之後改 SwiftData）
 - 從「檔案」匯入音檔（複製到 App 容器）
 - App 內建錄音：AAC M4A、48 kHz 單聲道、背景錄音、暫停／繼續、來電中斷處理
-- ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示、分享 Markdown
+- ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示
+- 逐字稿與筆記分享為 Markdown 或 Word（.docx；自寫 ZIP＋WordprocessingML，無第三方套件）
 - 簡→繁：OpenCC 1.4.2 字典（`PlaudNotes/Resources/OpenCC`，Apache-2.0）
 - LLM 筆記：多供應商、可自訂範本、輸出語言（翻譯）、長逐字稿分段
 - 說話者改名、專有名詞詞庫（轉錄 keyterms＋自動更正＋筆記）、以錄音日期產生筆記
-- 單元測試：ElevenLabs 解析、OpenCC 官方案例、LLM 請求／回應、範本與分段
+- 單元測試：ElevenLabs 解析、OpenCC 官方案例、LLM 請求／回應、範本與分段、docx 結構與內容
 
 ## 尚未包含
-Share Extension、長音檔分段上傳與續跑、本機轉錄（WhisperKit／FluidAudio）、docx。
+Share Extension、長音檔分段上傳與續跑、本機轉錄（WhisperKit／FluidAudio）、串流輸出。
 
 ## 在 Mac mini 上建置
 ```bash
