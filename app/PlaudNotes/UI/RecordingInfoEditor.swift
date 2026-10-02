@@ -18,6 +18,8 @@ struct RecordingInfoEditor: View {
                 } footer: {
                     Text(item.source == .recorded
                          ? "App 內錄音會自動記錄開始時間。"
+                         : item.recordedAtIsDateOnly == true
+                         ? "日期取自檔名（Plaud Web 匯出檔以當天行事曆命名），時刻未知；可在此補上實際時間。"
                          : "匯入的檔案會自動讀取檔案內記錄的時間；從語音備忘錄分享出來的檔案，這個時間可能是分享時間，請依實際情況修改。")
                 }
                 Section {
