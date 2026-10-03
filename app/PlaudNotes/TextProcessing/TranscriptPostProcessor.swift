@@ -35,7 +35,7 @@ enum TranscriptPostProcessor {
         t.segments = t.segments.map { seg in
             guard shouldConvert(seg.text) else { return seg }
             var s = seg
-            s.text = converter.convert(seg.text)
+            s.text = converter.convertWithFixups(seg.text)
             return s
         }
         t.postProcessing = "opencc-\(converter.mode.rawValue)"

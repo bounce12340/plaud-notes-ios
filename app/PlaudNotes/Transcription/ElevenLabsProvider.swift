@@ -51,7 +51,7 @@ struct ElevenLabsProvider: TranscriptionProvider {
         return PreparedRequest(urlRequest: request, body: body)
     }
 
-    // MARK: - 回應解析（字詞 → 依說話者合併成段落）
+    // MARK: - 回應解析（字詞 → 依說話者與句子合併成段落）
 
     private struct Response: Decodable {
         struct Word: Decodable {
@@ -66,15 +66,45 @@ struct ElevenLabsProvider: TranscriptionProvider {
         let words: [Word]?
     }
 
+    /// 同一人講太久也要切段，否則筆記的時間戳只剩段落開頭。
+    /// 樣本 C（2026-10-03，23 分鐘一人報告）：只依說話者合併時，前 12 分鐘成為 1 段，筆記時間戳幾乎都是 00:00:00。
+    enum Split {
+        /// 段落超過這個長度，遇到句尾標點就切
+        static let sentenceSeconds = 20.0
+        /// 再更長，遇到逗號、頓號也切
+        static let clauseSeconds = 40.0
+        /// 沒有標點時的硬上限
+        static let maxSeconds = 60.0
+        /// 停頓超過這個長度就切
+        static let pauseSeconds = 2.0
+        static let sentenceEnders: Set<Character> = ["。", "！", "？", "!", "?", ".", "…"]
+        static let clauseEnders: Set<Character> = ["，", "、", "；", "：", ",", ";", ":"]
+    }
+
+    /// 下一個字詞要不要另起一段（同一位說話者時才會問）。
+    static func shouldSplit(_ seg: TranscriptSegment, nextText: String, nextType: String?, nextStart: Double) -> Bool {
+        // 空白與標點不當段落開頭，標點留在前一句
+        guard nextType != "spacing",
+              let first = nextText.trimmingCharacters(in: .whitespaces).first,
+              !Split.sentenceEnders.contains(first), !Split.clauseEnders.contains(first) else { return false }
+        if nextStart - seg.end >= Split.pauseSeconds { return true }
+        let duration = seg.end - seg.start
+        let lastChar = seg.text.trimmingCharacters(in: .whitespaces).last
+        if duration >= Split.sentenceSeconds, let c = lastChar, Split.sentenceEnders.contains(c) { return true }
+        if duration >= Split.clauseSeconds, let c = lastChar, Split.clauseEnders.contains(c) { return true }
+        return duration >= Split.maxSeconds
+    }
+
     static func parse(_ data: Data) throws -> Transcript {
         let r = try JSONDecoder().decode(Response.self, from: data)
         var segments: [TranscriptSegment] = []
         for w in r.words ?? [] where w.type != "audio_event" {
             let start = w.start ?? segments.last?.end ?? 0
             let end = w.end ?? start
-            if var last = segments.last, last.speaker == w.speaker_id {
+            if var last = segments.last, last.speaker == w.speaker_id,
+               !shouldSplit(last, nextText: w.text, nextType: w.type, nextStart: start) {
                 last.text += w.text
-                last.end = end
+                last.end = max(last.end, end)
                 segments[segments.count - 1] = last
             } else {
                 segments.append(TranscriptSegment(start: start, end: end,

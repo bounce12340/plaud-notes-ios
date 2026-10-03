@@ -72,4 +72,26 @@ final class ChineseConverterTests: XCTestCase {
         XCTAssertEqual(out.postProcessing, "opencc-s2tw")
         XCTAssertEqual(out.segments.map(\.start), [0, 1, 2])
     }
+
+    // MARK: - App 修正（OpenCC 的「是只 → 是隻」）
+
+    func testFixupsRestoreZhiAfterShi() {
+        XCTAssertEqual(OpenCCFixups.apply("我們的活動不是隻有靠一個人"), "我們的活動不是只有靠一個人")
+        XCTAssertEqual(OpenCCFixups.apply("就是隻要、而是隻能、還是隻想、不是隻看業績"), "就是只要、而是只能、還是只想、不是只看業績")
+        XCTAssertEqual(OpenCCFixups.apply("這是隻貓，我從一隻小白兔開始"), "這是隻貓，我從一隻小白兔開始")
+    }
+
+    func testConvertWithFixupsKeepsOfficialConvertUntouched() throws {
+        let conv = try converter(.s2tw)
+        // OpenCC 官方結果（2026-10-03 以 opencc 套件確認）：convert 必須維持一致
+        XCTAssertEqual(conv.convert("我们不是只看业绩"), "我們不是隻看業績")
+        XCTAssertEqual(conv.convertWithFixups("我们不是只看业绩，这是只猫"), "我們不是只看業績，這是隻貓")
+    }
+
+    func testPostProcessorUsesFixups() throws {
+        let t = Transcript(languageCode: "zho", segments: [
+            .init(start: 0, end: 1, speaker: "speaker_0", text: "工具不是只有锤子"),
+        ], engine: "test")
+        XCTAssertEqual(TranscriptPostProcessor.process(t, with: try converter(.s2tw)).segments[0].text, "工具不是只有錘子")
+    }
 }
