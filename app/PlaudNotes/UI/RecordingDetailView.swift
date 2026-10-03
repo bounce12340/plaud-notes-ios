@@ -21,6 +21,10 @@ struct RecordingDetailView: View {
     @State private var confirmLLM = false
     @State private var editingSpeakers = false
     @State private var editingInfo = false
+    @State private var renaming = false
+    @State private var newTitle = ""
+    @State private var titleSuggestion: String?
+    @State private var confirmTitle = false
 
     /// 清單中最新的資料（手動改日期／備註後會更新）
     private var current: RecordingItem { library.item(id: item.id) ?? item }
@@ -45,7 +49,20 @@ struct RecordingDetailView: View {
             case .notes: notesSections
             }
         }
-        .navigationTitle(item.title)
+        .navigationTitle(current.title)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("重新命名", systemImage: "pencil") {
+                    newTitle = current.title
+                    renaming = true
+                }
+            }
+        }
+        .alert("重新命名", isPresented: $renaming) {
+            TextField("標題", text: $newTitle)
+            Button("取消", role: .cancel) {}
+            Button("儲存") { library.rename(id: item.id, title: newTitle) }
+        }
         .onAppear(perform: loadSaved)
         .confirmationDialog("音檔會上傳到 ElevenLabs 進行轉錄。", isPresented: $confirmUpload,
                             titleVisibility: .visible) {
@@ -68,9 +85,15 @@ struct RecordingDetailView: View {
                 }
             }
         }
-        .confirmationDialog("逐字稿會傳送到 \(settings.llm.host)（\(settings.llm.model)）整理成筆記。",
+        .confirmationDialog("逐字稿會傳送到 \(settings.llm.host)（\(settings.llm.model)）整理成筆記，並依筆記建議標題。",
                             isPresented: $confirmLLM, titleVisibility: .visible) {
             Button("傳送並產生筆記") { Task { await generateNotes() } }
+        }
+        .confirmationDialog("筆記內容會傳送到 \(settings.llm.host)（\(settings.llm.model)）產生標題建議。",
+                            isPresented: $confirmTitle, titleVisibility: .visible) {
+            Button("傳送並建議標題") {
+                Task { if let notes { await suggestTitle(from: TitleSuggester.stripNotesFooter(notes)) } }
+            }
         }
     }
 
@@ -101,12 +124,12 @@ struct RecordingDetailView: View {
                     Button("重新套用簡→繁（\(mode.rawValue)）") { reconvert(mode) }
                         .disabled(busy != nil)
                 }
-                let md = TranscriptExporter.markdown(title: item.title, transcript: transcript)
-                ShareLink("分享 Markdown", item: md, preview: SharePreview("\(item.title)-逐字稿.md"))
+                let md = TranscriptExporter.markdown(title: current.title, transcript: transcript)
+                ShareLink("分享 Markdown", item: md, preview: SharePreview("\(current.title)-逐字稿.md"))
                 ShareLink("分享 Word（.docx）",
-                          item: DocxFile(fileName: DocxFile.safeFileName("\(item.title)-逐字稿.docx"),
-                                         title: item.title, markdown: md),
-                          preview: SharePreview("\(item.title)-逐字稿.docx"))
+                          item: DocxFile(fileName: DocxFile.safeFileName("\(current.title)-逐字稿.docx"),
+                                         title: current.title, markdown: md),
+                          preview: SharePreview("\(current.title)-逐字稿.docx"))
             } footer: {
                 Text("引擎：\(transcript.engine)．語言：\(transcript.languageCode ?? "未知")．後處理：\(transcript.postProcessing ?? "無")")
             }
@@ -136,7 +159,7 @@ struct RecordingDetailView: View {
             Button {
                 editingInfo = true
             } label: {
-                LabeledContent("錄音時間", value: current.noteDate.formatted(date: .abbreviated, time: .shortened)
+                LabeledContent("錄音時間", value: current.noteDateText
                                + (current.recordedAtIsManual == true ? "（手動）" : ""))
             }
             if let remark = current.trimmedRemark {
@@ -152,13 +175,32 @@ struct RecordingDetailView: View {
                     .font(.caption).foregroundStyle(.orange)
             }
         }
+        if let suggestion = titleSuggestion {
+            Section {
+                Text(suggestion).font(.headline)
+                HStack {
+                    Button("套用") { applyTitle(suggestion) }
+                        .buttonStyle(.borderedProminent)
+                    Button("略過") { titleSuggestion = nil }
+                        .buttonStyle(.bordered)
+                }
+            } header: {
+                Text("AI 建議標題")
+            } footer: {
+                Text("目前標題：\(current.title)。套用後，原檔名會記在備註；筆記內的標題要重新產生筆記才會更新。")
+            }
+        }
         if let notes {
             Section {
-                ShareLink("分享 Markdown", item: notes, preview: SharePreview("\(item.title)-筆記.md"))
+                ShareLink("分享 Markdown", item: notes, preview: SharePreview("\(current.title)-筆記.md"))
                 ShareLink("分享 Word（.docx）",
-                          item: DocxFile(fileName: DocxFile.safeFileName("\(item.title)-筆記.docx"),
-                                         title: item.title, markdown: notes),
-                          preview: SharePreview("\(item.title)-筆記.docx"))
+                          item: DocxFile(fileName: DocxFile.safeFileName("\(current.title)-筆記.docx"),
+                                         title: current.title, markdown: notes),
+                          preview: SharePreview("\(current.title)-筆記.docx"))
+                if titleSuggestion == nil {
+                    Button("請 AI 建議標題") { confirmTitle = true }
+                        .disabled(busy != nil)
+                }
             }
             Section("筆記") {
                 Text(Self.renderMarkdown(notes))
@@ -256,6 +298,42 @@ struct RecordingDetailView: View {
             library.saveNotes(md + footer, for: item)
         } catch {
             self.error = error.localizedDescription
+            return
         }
+        // 同一個供應商順便依筆記建議標題（Plaud 檔名取自行事曆，常與內容不符）；確認對話框已說明
+        if let notes { await suggestTitle(from: TitleSuggester.stripNotesFooter(notes)) }
+    }
+
+    private func suggestTitle(from content: String) async {
+        busy = "建議標題中…"
+        defer { busy = nil }
+        do {
+            let config = settings.llm
+            let client = try LLMClientFactory.make(config: config,
+                                                   apiKey: KeychainStore.get(config.keychainAccount))
+            let outLang = noteLanguage == .sameAsSource ? "與內容相同的語言" : noteLanguage.rawValue
+            guard var title = try await TitleSuggester(client: client)
+                .suggest(content: content, currentTitle: current.title, outputLanguage: outLang) else { return }
+            if noteLanguage == .zhTW, let mode = settings.chineseConversion.mode,
+               let conv = await ChineseConverterCache.shared.converter(mode) {
+                let raw = title
+                title = await Task.detached { conv.convert(raw) }.value
+            }
+            titleSuggestion = title == current.title ? nil : title
+        } catch {
+            self.error = "標題建議失敗：\(error.localizedDescription)"
+        }
+    }
+
+    /// 套用建議標題；原檔名（行事曆事件）記到備註，之後整理筆記時仍可當背景資訊
+    private func applyTitle(_ title: String) {
+        let info = current
+        if let original = info.sourceFileName, original != title,
+           !(info.remark ?? "").contains(original) {
+            let line = "原檔名（行事曆）：\(original)"
+            library.setRemark(id: item.id, remark: [info.trimmedRemark, line].compactMap { $0 }.joined(separator: "\n"))
+        }
+        library.rename(id: item.id, title: title)
+        titleSuggestion = nil
     }
 }

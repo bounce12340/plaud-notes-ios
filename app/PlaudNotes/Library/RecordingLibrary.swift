@@ -18,9 +18,20 @@ struct RecordingItem: Identifiable, Codable, Hashable, Sendable {
     var recordedAtIsManual: Bool? = nil
     /// 使用者備註，例如「語音備忘錄分享時間，實際錄音為 9/29 下午」；會提供給筆記整理參考
     var remark: String? = nil
+    /// 匯入時的原始檔名（不含副檔名）；Plaud 匯出檔是當天行事曆事件名稱，改標題後仍保留
+    var sourceFileName: String? = nil
+    /// true 表示 recordedAt 只有日期（例如從檔名取得），時刻未知
+    var recordedAtIsDateOnly: Bool? = nil
 
     /// 筆記上的日期：優先用錄音時間，沒有才用加入 App 的時間
     var noteDate: Date { recordedAt ?? createdAt }
+
+    /// 畫面上顯示的錄音時間；只有日期時不顯示時刻
+    var noteDateText: String {
+        recordedAtIsDateOnly == true
+            ? noteDate.formatted(date: .abbreviated, time: .omitted) + "（時刻未知）"
+            : noteDate.formatted(date: .abbreviated, time: .shortened)
+    }
 
     var trimmedRemark: String? {
         let s = remark?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -61,15 +72,20 @@ final class RecordingLibrary {
         let dest = Self.recordingsDirectory.appending(path: "\(id.uuidString).\(ext)")
         // 複製前先讀原檔建立時間（複製後的檔案時間是現在）
         let fileDate = (try? source.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+        let name = source.deletingPathExtension().lastPathComponent
+        // 檔名開頭的日期（Plaud Web 匯出檔）比檔案建立時間（多半是下載時間）可靠
+        let nameDate = FileNameDate.parse(name, reference: fileDate ?? .now)
         do {
             try FileManager.default.copyItem(at: source, to: dest)
             add(RecordingItem(id: id,
-                              title: source.deletingPathExtension().lastPathComponent,
+                              title: name,
                               fileName: dest.lastPathComponent,
                               createdAt: .now,
                               source: .imported,
-                              recordedAt: fileDate))
-            // 音檔內嵌的錄音時間（例如語音備忘錄的 creation_time）比檔案時間可靠，有的話就覆蓋
+                              recordedAt: nameDate ?? fileDate,
+                              sourceFileName: name,
+                              recordedAtIsDateOnly: nameDate == nil ? nil : true))
+            // 音檔內嵌的錄音時間（例如語音備忘錄的 creation_time）比檔名、檔案時間可靠，有的話就覆蓋
             Task {
                 if let date = await AudioMetadata.creationDate(of: dest) { setRecordedAt(date, for: id) }
             }
@@ -85,22 +101,45 @@ final class RecordingLibrary {
         guard let i = items.firstIndex(where: { $0.id == id }),
               items[i].recordedAtIsManual != true else { return }
         items[i].recordedAt = date
+        items[i].recordedAtIsDateOnly = nil
         save()
     }
 
-    /// 使用者手動設定錄音時間與備註
+    /// 使用者手動設定錄音時間與備註。時間沒改（只改備註）就維持原本的自動偵測狀態。
     func updateInfo(id: UUID, recordedAt: Date, remark: String) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
-        items[i].recordedAt = recordedAt
-        items[i].recordedAtIsManual = true
+        if recordedAt != items[i].noteDate || items[i].recordedAt == nil {
+            items[i].recordedAt = recordedAt
+            items[i].recordedAtIsManual = true
+            items[i].recordedAtIsDateOnly = nil
+        }
         items[i].remark = remark
         save()
     }
 
-    /// 改回自動偵測（重新讀取音檔容器時間）
+    /// 只改備註，不動錄音時間
+    func setRemark(id: UUID, remark: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].remark = remark
+        save()
+    }
+
+    func rename(id: UUID, title: String) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].title = t
+        save()
+    }
+
+    /// 改回自動偵測（先用檔名日期，再以音檔容器時間覆蓋）
     func resetRecordedAt(id: UUID) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         items[i].recordedAtIsManual = false
+        if let name = items[i].sourceFileName,
+           let d = FileNameDate.parse(name, reference: items[i].createdAt) {
+            items[i].recordedAt = d
+            items[i].recordedAtIsDateOnly = true
+        }
         let url = url(for: items[i])
         save()
         Task {

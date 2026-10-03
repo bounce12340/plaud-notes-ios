@@ -86,7 +86,8 @@ struct NoteGenerator: Sendable {
         let speakers = req.transcript.speakers.compactMap { req.transcript.displayName($0) }
         return [
             "title": req.title,
-            "date": req.date.formatted(.iso8601.year().month().day()),
+            // ISO8601 格式預設用 UTC；台灣凌晨 0–8 點的錄音會被算成前一天，所以指定本地時區
+            "date": req.date.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day()),
             "speakers": speakers.isEmpty ? "未標示" : speakers.joined(separator: "、"),
             "language": req.transcript.languageCode ?? "未知",
             "output_language": req.outputLanguage,
