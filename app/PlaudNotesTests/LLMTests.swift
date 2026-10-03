@@ -212,6 +212,8 @@ final class LLMTests: XCTestCase {
         XCTAssertEqual(ab["stream"] as? Bool, true)
         let plain = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(a.makeRequest([]).httpBody)) as? [String: Any])
         XCTAssertNil(plain["stream"], "不串流時不送 stream 欄位")
+        XCTAssertEqual(ab["max_tokens"] as? Int, 64_000)
+        XCTAssertEqual(plain["max_tokens"] as? Int, 16_000)
     }
 
     @MainActor

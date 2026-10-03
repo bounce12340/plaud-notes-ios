@@ -214,7 +214,10 @@ struct AnthropicClient: LLMClient {
     let baseURL: URL
     let model: String
     let apiKey: String
-    var maxTokens = 8192
+    /// 一次性呼叫的輸出上限。Claude 4.6 以後的模型預設會先思考，思考也算在 max_tokens 內，
+    /// 8192 對長筆記不夠；官方建議非串流約 16000、串流約 64000（2026-10-04 依 Anthropic 文件）。
+    var maxTokens = 16_000
+    var streamingMaxTokens = 64_000
     var session: URLSession = .shared
 
     func complete(_ messages: [ChatMessage]) async throws -> String {
@@ -246,7 +249,7 @@ struct AnthropicClient: LLMClient {
         }
         let system = messages.filter { $0.role == .system }.map(\.content).joined(separator: "\n\n")
         let rest = messages.filter { $0.role != .system }.map { Msg(role: $0.role.rawValue, content: $0.content) }
-        r.httpBody = try JSONEncoder().encode(Body(model: model, max_tokens: maxTokens,
+        r.httpBody = try JSONEncoder().encode(Body(model: model, max_tokens: stream ? streamingMaxTokens : maxTokens,
                                                    system: system.isEmpty ? nil : system,
                                                    messages: rest, stream: stream ? true : nil))
         return r

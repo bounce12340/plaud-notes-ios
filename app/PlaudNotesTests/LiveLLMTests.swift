@@ -60,6 +60,45 @@ final class LiveLLMTests: XCTestCase {
         print("LIVE[stream] updates=\(updates) thinking=\(sawThinking)")
     }
 
+    // MARK: - Anthropic（Claude）
+
+    /// CI 只在手動觸發且勾選 live_llm 時，從 repo secret ANTHROPIC_API_KEY 提供
+    private func anthropicClient() throws -> LLMClient {
+        let k = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !k.isEmpty else { throw XCTSkip("未提供 ANTHROPIC_API_KEY，略過實際呼叫") }
+        var config = LLMConfig(preset: try XCTUnwrap(LLMPreset.find("anthropic")))
+        config.model = "claude-opus-5-5"
+        return try LLMClientFactory.make(config: config, apiKey: k)
+    }
+
+    func testAnthropicConnection() async throws {
+        let reply = try await anthropicClient().complete([ChatMessage(role: .user, content: "請只回覆 OK")])
+        XCTAssertFalse(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        print("LIVE[anthropic] connection reply: \(reply.prefix(40))")
+    }
+
+    @MainActor
+    func testAnthropicStreamingNotes() async throws {
+        let c = try anthropicClient()
+        // 直接看串流本身：要有多個正文片段，不是退回一次性呼叫
+        var pieces = 0
+        for try await d in c.stream([ChatMessage(role: .user, content: "用繁體中文寫三句話介紹台北。")]) {
+            if case .content = d { pieces += 1 }
+        }
+        XCTAssertGreaterThan(pieces, 1, "Anthropic 串流應分多個片段送達")
+
+        let gen = NoteGenerator(client: c, maxInputCharacters: 150_000)
+        var updates = 0
+        var lastText = ""
+        let result = try await gen.generate(Self.request()) { p in
+            if case .writing(let t) = p { updates += 1; lastText = t }
+        }
+        try check(result, label: "anthropic-stream")
+        XCTAssertEqual(lastText, result.markdown)
+        print("LIVE[anthropic-stream] pieces=\(pieces) updates=\(updates)")
+    }
+
     // MARK: -
 
     private func check(_ result: NoteGenerator.Result, label: String) throws {
