@@ -40,6 +40,26 @@ final class LiveLLMTests: XCTestCase {
         XCTAssertGreaterThan(result.chunkCount, 1)
     }
 
+    @MainActor
+    func testStreamingNotes() async throws {
+        let c = try client()
+        let gen = NoteGenerator(client: c, maxInputCharacters: 300_000)
+        var updates = 0
+        var sawThinking = false
+        var lastText = ""
+        let result = try await gen.generate(Self.request()) { p in
+            switch p {
+            case .thinking: sawThinking = true
+            case .writing(let t): updates += 1; lastText = t
+            case .summarizing: break
+            }
+        }
+        try check(result, label: "stream")
+        XCTAssertGreaterThan(updates, 1, "串流應分多次更新畫面")
+        XCTAssertEqual(lastText, result.markdown)
+        print("LIVE[stream] updates=\(updates) thinking=\(sawThinking)")
+    }
+
     // MARK: -
 
     private func check(_ result: NoteGenerator.Result, label: String) throws {

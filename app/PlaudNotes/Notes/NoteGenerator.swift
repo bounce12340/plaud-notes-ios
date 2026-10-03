@@ -23,6 +23,18 @@ struct NoteGenerator: Sendable {
         var chunkCount: Int
     }
 
+    /// 產生過程的進度（給畫面顯示）
+    enum Progress: Sendable, Equatable {
+        /// 長逐字稿分段整理中（已完成幾段／共幾段）
+        case summarizing(done: Int, total: Int)
+        /// 推理模型正在思考（還沒有正文）
+        case thinking
+        /// 最終筆記目前已收到的內容
+        case writing(String)
+    }
+
+    typealias ProgressHandler = @MainActor @Sendable (Progress) -> Void
+
     static let systemPrompt = """
     你是專業的會議與訪談筆記整理助理。規則：
     1. 只能根據使用者提供的逐字稿整理，不可加入逐字稿沒有的事實、數字、人名或結論。
@@ -36,14 +48,15 @@ struct NoteGenerator: Sendable {
     9. 若有提供「專有名詞」清單，逐字稿中發音或拼寫相近的詞，請改用清單中的正確寫法。
     """
 
-    func generate(_ req: Request) async throws -> Result {
+    /// `onProgress` 有值時，最後一次呼叫改用串流，邊收邊回報；沒有就一次取得完整回覆。
+    func generate(_ req: Request, onProgress: ProgressHandler? = nil) async throws -> Result {
         let lines = Self.transcriptLines(req.transcript)
         let chunks = Self.chunk(lines, limit: max(2_000, maxInputCharacters))
         let values = Self.values(for: req)
         let instructions = req.template.render(values)
 
         if chunks.count <= 1 {
-            let md = try await client.complete([
+            let md = try await finalCall(onProgress: onProgress, [
                 ChatMessage(role: .system, content: Self.systemPrompt),
                 ChatMessage(role: .user, content: Self.finalPrompt(instructions: instructions, values: values,
                                                                  body: "逐字稿：\n" + (chunks.first ?? ""))),
@@ -56,6 +69,7 @@ struct NoteGenerator: Sendable {
         var partials: [String] = []
         for (i, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
+            await onProgress?(.summarizing(done: i, total: chunks.count))
             let part = try await client.complete([
                 ChatMessage(role: .system, content: Self.systemPrompt),
                 ChatMessage(role: .user, content: """
@@ -71,13 +85,39 @@ struct NoteGenerator: Sendable {
         }
 
         // Reduce：依範本合併
-        let md = try await client.complete([
+        await onProgress?(.summarizing(done: chunks.count, total: chunks.count))
+        let md = try await finalCall(onProgress: onProgress, [
             ChatMessage(role: .system, content: Self.systemPrompt),
             ChatMessage(role: .user, content: Self.finalPrompt(
                 instructions: instructions, values: values,
                 body: "以下是逐字稿各段的重點（依時間順序，已含時間戳）：\n\n" + partials.joined(separator: "\n\n"))),
         ])
         return Result(markdown: md, chunkCount: chunks.count)
+    }
+
+    /// 最終筆記：有進度回報就用串流（約每 0.15 秒更新一次畫面），否則一次取得。
+    private func finalCall(onProgress: ProgressHandler?, _ messages: [ChatMessage]) async throws -> String {
+        guard let onProgress else { return try await client.complete(messages) }
+        var text = ""
+        var lastUpdate = ContinuousClock.now
+        var reportedThinking = false
+        for try await delta in client.stream(messages) {
+            switch delta {
+            case .reasoning:
+                // 思考內容不屬於筆記，只告訴畫面模型正在思考
+                if !reportedThinking { await onProgress(.thinking); reportedThinking = true }
+                continue
+            case .content(let piece):
+                text += piece
+            }
+            if ContinuousClock.now - lastUpdate >= .milliseconds(150) {
+                await onProgress(.writing(text))
+                lastUpdate = .now
+            }
+        }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LLMError.emptyResponse }
+        await onProgress(.writing(text))
+        return text
     }
 
     // MARK: - 組 prompt
