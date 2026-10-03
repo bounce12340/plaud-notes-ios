@@ -27,8 +27,9 @@ struct NoteGenerator: Sendable {
     enum Progress: Sendable, Equatable {
         /// 長逐字稿分段整理中（已完成幾段／共幾段）
         case summarizing(done: Int, total: Int)
-        /// 推理模型正在思考（還沒有正文）
-        case thinking
+        /// 推理模型正在思考（還沒有正文），附目前已收到的思考字數，讓畫面看得出仍在進行。
+        /// 樣本 C 實測：deepseek-flash 先思考約 97 秒才開始寫正文。
+        case thinking(characters: Int)
         /// 最終筆記目前已收到的內容
         case writing(String)
     }
@@ -96,26 +97,40 @@ struct NoteGenerator: Sendable {
     }
 
     /// 最終筆記：有進度回報就用串流（約每 0.15 秒更新一次畫面），否則一次取得。
+    /// 串流還沒收到任何正文就失敗或結束時（例如供應商不支援串流、事件格式不符），改用一次性呼叫，
+    /// 避免串流問題讓整份筆記產生失敗。已收到部分正文後才失敗則直接回報錯誤，不重送。
     private func finalCall(onProgress: ProgressHandler?, _ messages: [ChatMessage]) async throws -> String {
         guard let onProgress else { return try await client.complete(messages) }
         var text = ""
         var lastUpdate = ContinuousClock.now
-        var reportedThinking = false
-        for try await delta in client.stream(messages) {
-            switch delta {
-            case .reasoning:
-                // 思考內容不屬於筆記，只告訴畫面模型正在思考
-                if !reportedThinking { await onProgress(.thinking); reportedThinking = true }
-                continue
-            case .content(let piece):
-                text += piece
+        var thinkingCharacters = 0
+        do {
+            for try await delta in client.stream(messages) {
+                switch delta {
+                case .reasoning(let piece):
+                    // 思考內容不屬於筆記，只把字數告訴畫面
+                    let first = thinkingCharacters == 0
+                    thinkingCharacters += piece.count
+                    if first || ContinuousClock.now - lastUpdate >= .milliseconds(500) {
+                        await onProgress(.thinking(characters: thinkingCharacters))
+                        lastUpdate = .now
+                    }
+                    continue
+                case .content(let piece):
+                    text += piece
+                }
+                if ContinuousClock.now - lastUpdate >= .milliseconds(150) {
+                    await onProgress(.writing(text))
+                    lastUpdate = .now
+                }
             }
-            if ContinuousClock.now - lastUpdate >= .milliseconds(150) {
-                await onProgress(.writing(text))
-                lastUpdate = .now
-            }
+        } catch {
+            guard text.isEmpty, !(error is CancellationError) else { throw error }
         }
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LLMError.emptyResponse }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try Task.checkCancellation()
+            text = try await client.complete(messages)
+        }
         await onProgress(.writing(text))
         return text
     }

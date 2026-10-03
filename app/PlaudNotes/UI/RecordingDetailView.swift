@@ -318,8 +318,8 @@ struct RecordingDetailView: View {
                 switch progress {
                 case .summarizing(let done, let total):
                     busy = done < total ? "分段整理中（\(done + 1)/\(total)）…" : "合併各段重點…"
-                case .thinking:
-                    busy = "模型思考中…"
+                case .thinking(let characters):
+                    busy = "模型思考中（已思考 \(characters) 字）…"
                 case .writing(let text):
                     busy = "筆記產生中（\(text.count) 字）…"
                     streamingNotes = text

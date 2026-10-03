@@ -221,7 +221,7 @@ final class LLMTests: XCTestCase {
         let result = try await NoteGenerator(client: llm, maxInputCharacters: 100_000)
             .generate(Self.request(segments: 3)) { events.append($0) }
         XCTAssertEqual(result.markdown, "## 標題\n內容")
-        XCTAssertEqual(events.first, .thinking)
+        XCTAssertEqual(events.first, .thinking(characters: 2))
         XCTAssertEqual(events.last, .writing("## 標題\n內容"))
         XCTAssertFalse(events.contains(.writing("思考")), "思考內容不可出現在筆記")
     }
@@ -240,6 +240,39 @@ final class LLMTests: XCTestCase {
         XCTAssertEqual(events.last, .writing("合併結果"))
     }
 
+    @MainActor
+    func testStreamFailureBeforeContentFallsBackToComplete() async throws {
+        // 例如供應商不支援串流（HTTP 400）或事件格式不符
+        let llm = StreamingMockLLM(pieces: [.reasoning("想")], streamError: LLMError.http(400, "stream not supported"),
+                                   completeReply: "## 一次性結果")
+        var last: NoteGenerator.Progress?
+        let result = try await NoteGenerator(client: llm, maxInputCharacters: 100_000)
+            .generate(Self.request(segments: 3)) { last = $0 }
+        XCTAssertEqual(result.markdown, "## 一次性結果")
+        XCTAssertEqual(llm.completeCalls, 1)
+        XCTAssertEqual(last, .writing("## 一次性結果"))
+    }
+
+    @MainActor
+    func testStreamEndingWithoutContentFallsBackToComplete() async throws {
+        let llm = StreamingMockLLM(pieces: [], completeReply: "## 一次性結果")
+        let result = try await NoteGenerator(client: llm, maxInputCharacters: 100_000)
+            .generate(Self.request(segments: 3)) { _ in }
+        XCTAssertEqual(result.markdown, "## 一次性結果")
+        XCTAssertEqual(llm.completeCalls, 1)
+    }
+
+    func testStreamFailureAfterContentIsReported() async {
+        let llm = StreamingMockLLM(pieces: [.content("寫到一半")], streamError: LLMError.http(0, "連線中斷"))
+        do {
+            _ = try await NoteGenerator(client: llm, maxInputCharacters: 100_000).generate(Self.request(segments: 3)) { _ in }
+            XCTFail("已收到部分內容後失敗，應回報錯誤而不是重送")
+        } catch {
+            XCTAssertEqual(error as? LLMError, .http(0, "連線中斷"))
+            XCTAssertEqual(llm.completeCalls, 0)
+        }
+    }
+
     func testGeneratorEmptyStreamThrows() async {
         let llm = StreamingMockLLM(pieces: [.reasoning("只有思考")])
         do {
@@ -252,19 +285,32 @@ final class LLMTests: XCTestCase {
 
 }
 
-/// 依序串流固定片段的假 LLM；complete() 回傳正文合併結果
+/// 依序串流固定片段的假 LLM；可在送出片段後丟出錯誤。complete() 回傳 completeReply 或正文合併結果。
 final class StreamingMockLLM: LLMClient, @unchecked Sendable {
     let pieces: [LLMDelta]
-    init(pieces: [LLMDelta]) { self.pieces = pieces }
+    let streamError: Error?
+    let completeReply: String?
+    private let lock = NSLock()
+    private var _completeCalls = 0
+    var completeCalls: Int { lock.withLock { _completeCalls } }
+
+    init(pieces: [LLMDelta], streamError: Error? = nil, completeReply: String? = nil) {
+        self.pieces = pieces
+        self.streamError = streamError
+        self.completeReply = completeReply
+    }
 
     func complete(_ messages: [ChatMessage]) async throws -> String {
-        pieces.compactMap { if case .content(let t) = $0 { t } else { nil } }.joined()
+        lock.withLock { _completeCalls += 1 }
+        let text = completeReply ?? pieces.compactMap { if case .content(let t) = $0 { t } else { nil } }.joined()
+        guard !text.isEmpty else { throw LLMError.emptyResponse }
+        return text
     }
 
     func stream(_ messages: [ChatMessage]) -> AsyncThrowingStream<LLMDelta, Error> {
         AsyncThrowingStream { c in
             for p in pieces { c.yield(p) }
-            c.finish()
+            c.finish(throwing: streamError)
         }
     }
 }
