@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       live_llm:
-        description: "實際呼叫 DeepSeek（需 repo secret DEEPSEEK_API_KEY；只用虛構逐字稿）"
+        description: "實際呼叫 DeepSeek／Claude／Ollama Cloud／ElevenLabs（需對應的 repo secret；只用虛構逐字稿與合成語音）"
         type: boolean
         default: false
 
@@ -60,6 +60,9 @@ jobs:
           # 只有手動觸發且勾選 live_llm 才提供金鑰；push / pull_request 一律不帶（LiveLLMTests 會略過）。
           # xcodebuild 會把 TEST_RUNNER_ 開頭的變數去掉前綴後傳給測試程序。
           TEST_RUNNER_DEEPSEEK_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.DEEPSEEK_API_KEY || '' }}
+          TEST_RUNNER_ANTHROPIC_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.ANTHROPIC_API_KEY || '' }}
+          TEST_RUNNER_OLLAMA_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.OLLAMA_API_KEY || '' }}
+          TEST_RUNNER_ELEVENLABS_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.ELEVENLABS_API_KEY || '' }}
         run: |
           set -o pipefail
           xcodebuild test \

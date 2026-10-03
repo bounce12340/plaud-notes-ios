@@ -157,4 +157,164 @@ final class LLMTests: XCTestCase {
                      template: NoteTemplate.builtIns[0], outputLanguage: NoteLanguage.zhTW.rawValue,
                      glossary: ["Etihad", "C2 Pharma"])
     }
+
+    // MARK: - 串流
+
+    /// DeepSeek deepseek-flash 實際串流回應（2026-10-03，問題為虛構的「介紹台北」；思考片段只保留前 3 個）
+    private func deepseekStream() throws -> [String] {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "deepseek_stream", withExtension: "txt"))
+        return try String(contentsOf: url, encoding: .utf8).components(separatedBy: "\n")
+    }
+
+    func testOpenAIStreamParsing() throws {
+        var reasoning = 0
+        var content = ""
+        var done = false
+        for line in try deepseekStream() {
+            guard let payload = SSE.payload(line) else { continue }
+            switch try SSE.openAIDelta(payload) {
+            case .delta(.reasoning): reasoning += 1
+            case .delta(.content(let t)): XCTAssertFalse(done); content += t
+            case .done: done = true
+            case .ignore: break
+            }
+        }
+        XCTAssertEqual(reasoning, 3)
+        XCTAssertTrue(done)
+        XCTAssertEqual(content, "台北是台灣的政治、經濟與文化中心，也是一座充滿活力的現代都市。這裡有台北101、故宮博物院、夜市小吃與便捷捷運，融合傳統底蘊與創新風貌，展現獨特的城市魅力。")
+        XCTAssertNil(SSE.payload(": keep-alive"))
+        // Ollama 的 OpenAI 相容端點把思考放在 reasoning 欄位
+        XCTAssertEqual(try SSE.openAIDelta(#"{"choices":[{"delta":{"content":"","reasoning":"想"}}]}"#), .delta(.reasoning("想")))
+        XCTAssertThrowsError(try SSE.openAIDelta(#"{"error":{"message":"rate limited"}}"#))
+    }
+
+    func testAnthropicStreamParsing() throws {
+        // 依 Anthropic Messages API 串流文件的事件格式（未實際呼叫）
+        let events = [
+            #"{"type":"message_start","message":{"id":"m"}}"#,
+            #"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
+            #"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"想"}}"#,
+            #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"你"}}"#,
+            #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"好"}}"#,
+            #"{"type":"ping"}"#,
+            #"{"type":"message_stop"}"#,
+        ]
+        let parsed = try events.map(SSE.anthropicDelta)
+        XCTAssertEqual(parsed, [.ignore, .ignore, .delta(.reasoning("想")), .delta(.content("你")),
+                                .delta(.content("好")), .ignore, .done])
+        XCTAssertThrowsError(try SSE.anthropicDelta(#"{"type":"error","error":{"message":"overloaded"}}"#))
+    }
+
+    func testStreamRequestBodies() throws {
+        let o = OpenAICompatibleClient(baseURL: URL(string: "https://api.deepseek.com")!, model: "m", apiKey: "k")
+        let ob = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(o.makeRequest([], stream: true).httpBody)) as? [String: Any])
+        XCTAssertEqual(ob["stream"] as? Bool, true)
+        let a = AnthropicClient(baseURL: URL(string: "https://api.anthropic.com")!, model: "m", apiKey: "k")
+        let ab = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(a.makeRequest([], stream: true).httpBody)) as? [String: Any])
+        XCTAssertEqual(ab["stream"] as? Bool, true)
+        let plain = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(a.makeRequest([]).httpBody)) as? [String: Any])
+        XCTAssertNil(plain["stream"], "不串流時不送 stream 欄位")
+        XCTAssertEqual(ab["max_tokens"] as? Int, 64_000)
+        XCTAssertEqual(plain["max_tokens"] as? Int, 16_000)
+    }
+
+    @MainActor
+    func testGeneratorStreamsFinalNotes() async throws {
+        let llm = StreamingMockLLM(pieces: [.reasoning("思考"), .content("## 標題\n"), .content("內容")])
+        var events: [NoteGenerator.Progress] = []
+        let result = try await NoteGenerator(client: llm, maxInputCharacters: 100_000)
+            .generate(Self.request(segments: 3)) { events.append($0) }
+        XCTAssertEqual(result.markdown, "## 標題\n內容")
+        XCTAssertEqual(events.first, .thinking(characters: 2))
+        XCTAssertEqual(events.last, .writing("## 標題\n內容"))
+        XCTAssertFalse(events.contains(.writing("思考")), "思考內容不可出現在筆記")
+    }
+
+    @MainActor
+    func testGeneratorReportsMapProgress() async throws {
+        let llm = StreamingMockLLM(pieces: [.content("合併結果")])
+        var events: [NoteGenerator.Progress] = []
+        let result = try await NoteGenerator(client: llm, maxInputCharacters: 2_000)
+            .generate(Self.request(segments: 120)) { events.append($0) }
+        XCTAssertGreaterThan(result.chunkCount, 1)
+        let summarizing = events.compactMap { e -> Int? in
+            if case .summarizing(let done, _) = e { return done } else { return nil }
+        }
+        XCTAssertEqual(summarizing, Array(0...result.chunkCount))
+        XCTAssertEqual(events.last, .writing("合併結果"))
+    }
+
+    @MainActor
+    func testStreamFailureBeforeContentFallsBackToComplete() async throws {
+        // 例如供應商不支援串流（HTTP 400）或事件格式不符
+        let llm = StreamingMockLLM(pieces: [.reasoning("想")], streamError: LLMError.http(400, "stream not supported"),
+                                   completeReply: "## 一次性結果")
+        var last: NoteGenerator.Progress?
+        let result = try await NoteGenerator(client: llm, maxInputCharacters: 100_000)
+            .generate(Self.request(segments: 3)) { last = $0 }
+        XCTAssertEqual(result.markdown, "## 一次性結果")
+        XCTAssertEqual(llm.completeCalls, 1)
+        XCTAssertEqual(last, .writing("## 一次性結果"))
+    }
+
+    @MainActor
+    func testStreamEndingWithoutContentFallsBackToComplete() async throws {
+        let llm = StreamingMockLLM(pieces: [], completeReply: "## 一次性結果")
+        let result = try await NoteGenerator(client: llm, maxInputCharacters: 100_000)
+            .generate(Self.request(segments: 3)) { _ in }
+        XCTAssertEqual(result.markdown, "## 一次性結果")
+        XCTAssertEqual(llm.completeCalls, 1)
+    }
+
+    func testStreamFailureAfterContentIsReported() async {
+        let llm = StreamingMockLLM(pieces: [.content("寫到一半")], streamError: LLMError.http(0, "連線中斷"))
+        do {
+            _ = try await NoteGenerator(client: llm, maxInputCharacters: 100_000).generate(Self.request(segments: 3)) { _ in }
+            XCTFail("已收到部分內容後失敗，應回報錯誤而不是重送")
+        } catch {
+            XCTAssertEqual(error as? LLMError, .http(0, "連線中斷"))
+            XCTAssertEqual(llm.completeCalls, 0)
+        }
+    }
+
+    func testGeneratorEmptyStreamThrows() async {
+        let llm = StreamingMockLLM(pieces: [.reasoning("只有思考")])
+        do {
+            _ = try await NoteGenerator(client: llm, maxInputCharacters: 100_000).generate(Self.request(segments: 3)) { _ in }
+            XCTFail("應丟出 emptyResponse")
+        } catch {
+            XCTAssertEqual(error as? LLMError, .emptyResponse)
+        }
+    }
+
+}
+
+/// 依序串流固定片段的假 LLM；可在送出片段後丟出錯誤。complete() 回傳 completeReply 或正文合併結果。
+final class StreamingMockLLM: LLMClient, @unchecked Sendable {
+    let pieces: [LLMDelta]
+    let streamError: Error?
+    let completeReply: String?
+    private let lock = NSLock()
+    private var _completeCalls = 0
+    var completeCalls: Int { lock.withLock { _completeCalls } }
+
+    init(pieces: [LLMDelta], streamError: Error? = nil, completeReply: String? = nil) {
+        self.pieces = pieces
+        self.streamError = streamError
+        self.completeReply = completeReply
+    }
+
+    func complete(_ messages: [ChatMessage]) async throws -> String {
+        lock.withLock { _completeCalls += 1 }
+        let text = completeReply ?? pieces.compactMap { if case .content(let t) = $0 { t } else { nil } }.joined()
+        guard !text.isEmpty else { throw LLMError.emptyResponse }
+        return text
+    }
+
+    func stream(_ messages: [ChatMessage]) -> AsyncThrowingStream<LLMDelta, Error> {
+        AsyncThrowingStream { c in
+            for p in pieces { c.yield(p) }
+            c.finish(throwing: streamError)
+        }
+    }
 }

@@ -11,6 +11,31 @@ struct ChatMessage: Codable, Sendable, Equatable {
 protocol LLMClient: Sendable {
     /// 送出對話並回傳模型的文字回覆。
     func complete(_ messages: [ChatMessage]) async throws -> String
+    /// 串流回覆：依序回傳模型的思考片段與正文片段。
+    func stream(_ messages: [ChatMessage]) -> AsyncThrowingStream<LLMDelta, Error>
+}
+
+/// 串流收到的一個片段。DeepSeek 等推理模型會先送思考內容（不屬於回覆），再送正文。
+enum LLMDelta: Sendable, Equatable {
+    case reasoning(String)
+    case content(String)
+}
+
+extension LLMClient {
+    /// 不支援串流的客戶端：等完整回覆後一次回傳。
+    func stream(_ messages: [ChatMessage]) -> AsyncThrowingStream<LLMDelta, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    continuation.yield(.content(try await complete(messages)))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 enum LLMAPIStyle: String, Codable, Sendable, CaseIterable {
@@ -57,6 +82,10 @@ struct LLMPreset: Identifiable, Hashable, Sendable {
                   baseURL: "https://openrouter.ai/api/v1", defaultModel: "",
                   requiresKey: true, maxInputCharacters: 60_000,
                   note: "模型名稱格式如「供應商/模型」。"),
+        LLMPreset(id: "ollama-cloud", name: "Ollama Cloud", style: .openAICompatible,
+                  baseURL: "https://ollama.com/v1", defaultModel: "gpt-oss:20b",
+                  requiresKey: true, maxInputCharacters: 60_000,
+                  note: "ollama.com 的雲端模型（OpenAI 相容端點，依官方文件 2026-10-04）。模型名稱以 ollama.com 清單為準，例如 gpt-oss:20b、gpt-oss:120b。"),
         LLMPreset(id: "ollama", name: "Ollama（自架 gpt-oss）", style: .openAICompatible,
                   baseURL: "http://mac-mini.local:11434/v1", defaultModel: "gpt-oss:20b",
                   requiresKey: false, maxInputCharacters: 40_000,
@@ -147,7 +176,12 @@ struct OpenAICompatibleClient: LLMClient {
         return try Self.parse(data)
     }
 
-    func makeRequest(_ messages: [ChatMessage]) throws -> URLRequest {
+    func stream(_ messages: [ChatMessage]) -> AsyncThrowingStream<LLMDelta, Error> {
+        LLMHTTP.sse(session: session, request: { try makeRequest(messages, stream: true) },
+                    parse: SSE.openAIDelta)
+    }
+
+    func makeRequest(_ messages: [ChatMessage], stream: Bool = false) throws -> URLRequest {
         var r = URLRequest(url: LLMHTTP.join(baseURL, "chat/completions"))
         r.httpMethod = "POST"
         r.timeoutInterval = 600
@@ -157,7 +191,7 @@ struct OpenAICompatibleClient: LLMClient {
         }
         // 只送必要欄位：不同供應商對 temperature / max_tokens 的支援不一致
         struct Body: Encodable { let model: String; let messages: [ChatMessage]; let stream: Bool }
-        r.httpBody = try JSONEncoder().encode(Body(model: model, messages: messages, stream: false))
+        r.httpBody = try JSONEncoder().encode(Body(model: model, messages: messages, stream: stream))
         return r
     }
 
@@ -184,7 +218,10 @@ struct AnthropicClient: LLMClient {
     let baseURL: URL
     let model: String
     let apiKey: String
-    var maxTokens = 8192
+    /// 一次性呼叫的輸出上限。Claude 4.6 以後的模型預設會先思考，思考也算在 max_tokens 內，
+    /// 8192 對長筆記不夠；官方建議非串流約 16000、串流約 64000（2026-10-04 依 Anthropic 文件）。
+    var maxTokens = 16_000
+    var streamingMaxTokens = 64_000
     var session: URLSession = .shared
 
     func complete(_ messages: [ChatMessage]) async throws -> String {
@@ -194,7 +231,12 @@ struct AnthropicClient: LLMClient {
         return try Self.parse(data)
     }
 
-    func makeRequest(_ messages: [ChatMessage]) throws -> URLRequest {
+    func stream(_ messages: [ChatMessage]) -> AsyncThrowingStream<LLMDelta, Error> {
+        LLMHTTP.sse(session: session, request: { try makeRequest(messages, stream: true) },
+                    parse: SSE.anthropicDelta)
+    }
+
+    func makeRequest(_ messages: [ChatMessage], stream: Bool = false) throws -> URLRequest {
         var r = URLRequest(url: LLMHTTP.join(baseURL, "v1/messages"))
         r.httpMethod = "POST"
         r.timeoutInterval = 600
@@ -207,12 +249,13 @@ struct AnthropicClient: LLMClient {
             let max_tokens: Int
             let system: String?
             let messages: [Msg]
+            let stream: Bool?
         }
         let system = messages.filter { $0.role == .system }.map(\.content).joined(separator: "\n\n")
         let rest = messages.filter { $0.role != .system }.map { Msg(role: $0.role.rawValue, content: $0.content) }
-        r.httpBody = try JSONEncoder().encode(Body(model: model, max_tokens: maxTokens,
+        r.httpBody = try JSONEncoder().encode(Body(model: model, max_tokens: stream ? streamingMaxTokens : maxTokens,
                                                    system: system.isEmpty ? nil : system,
-                                                   messages: rest))
+                                                   messages: rest, stream: stream ? true : nil))
         return r
     }
 
@@ -244,6 +287,43 @@ enum LLMHTTP {
         }
     }
 
+    /// 送出串流請求，逐行解析 Server-Sent Events。
+    static func sse(session: URLSession, request: @escaping @Sendable () throws -> URLRequest,
+                    parse: @escaping @Sendable (String) throws -> SSE.Event) -> AsyncThrowingStream<LLMDelta, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    #if canImport(FoundationNetworking)
+                    // Linux 的 Foundation 沒有 URLSession.bytes；App 只在 Apple 平台執行
+                    throw LLMError.badResponse
+                    #else
+                    let (bytes, response) = try await session.bytes(for: try request())
+                    if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                        var data = Data()
+                        for try await b in bytes {
+                            data.append(b)
+                            if data.count >= 4096 { break }
+                        }
+                        throw LLMError.http(http.statusCode, errorMessage(data))
+                    }
+                    lines: for try await line in bytes.lines {
+                        guard let payload = SSE.payload(line) else { continue }
+                        switch try parse(payload) {
+                        case .delta(let d): continuation.yield(d)
+                        case .done: break lines
+                        case .ignore: continue
+                        }
+                    }
+                    continuation.finish()
+                    #endif
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     /// 取出錯誤訊息（OpenAI／Anthropic 都用 {"error":{"message":…}}），最多 300 字，不回傳原始請求內容。
     static func errorMessage(_ data: Data) -> String {
         struct E: Decodable { struct Inner: Decodable { let message: String? }; let error: Inner? }
@@ -251,5 +331,64 @@ enum LLMHTTP {
             return String(m.prefix(300))
         }
         return String(decoding: data.prefix(300), as: UTF8.self)
+    }
+}
+
+// MARK: - Server-Sent Events 解析
+
+enum SSE {
+    enum Event: Equatable {
+        case delta(LLMDelta)
+        case done
+        case ignore
+    }
+
+    /// 取出 `data:` 行的內容；其他行（event:、註解、空行）回傳 nil。
+    static func payload(_ line: String) -> String? {
+        guard line.hasPrefix("data:") else { return nil }
+        return line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// OpenAI 相容格式：choices[0].delta.content／reasoning_content，結尾是 [DONE]。
+    /// 2026-10-03 以 DeepSeek deepseek-flash 實測：先送 reasoning_content，再送 content。
+    static func openAIDelta(_ payload: String) throws -> Event {
+        if payload == "[DONE]" { return .done }
+        struct Chunk: Decodable {
+            struct Choice: Decodable {
+                struct Delta: Decodable { let content: String?; let reasoning_content: String?; let reasoning: String? }
+                let delta: Delta?
+            }
+            struct Err: Decodable { let message: String? }
+            let choices: [Choice]?
+            let error: Err?
+        }
+        guard let c = try? JSONDecoder().decode(Chunk.self, from: Data(payload.utf8)) else { return .ignore }
+        if let e = c.error { throw LLMError.http(0, String((e.message ?? "串流中斷").prefix(300))) }
+        let d = c.choices?.first?.delta
+        if let text = d?.content, !text.isEmpty { return .delta(.content(text)) }
+        // DeepSeek 用 reasoning_content；Ollama 的 OpenAI 相容端點用 reasoning
+        if let text = d?.reasoning_content ?? d?.reasoning, !text.isEmpty { return .delta(.reasoning(text)) }
+        return .ignore
+    }
+
+    /// Anthropic Messages API 串流（依官方文件）：content_block_delta 的 text_delta／thinking_delta，結尾 message_stop。
+    static func anthropicDelta(_ payload: String) throws -> Event {
+        struct Chunk: Decodable {
+            struct Delta: Decodable { let type: String?; let text: String?; let thinking: String? }
+            struct Err: Decodable { let message: String? }
+            let type: String
+            let delta: Delta?
+            let error: Err?
+        }
+        guard let c = try? JSONDecoder().decode(Chunk.self, from: Data(payload.utf8)) else { return .ignore }
+        switch c.type {
+        case "message_stop": return .done
+        case "error": throw LLMError.http(0, String((c.error?.message ?? "串流中斷").prefix(300)))
+        case "content_block_delta":
+            if let t = c.delta?.text, !t.isEmpty { return .delta(.content(t)) }
+            if let t = c.delta?.thinking, !t.isEmpty { return .delta(.reasoning(t)) }
+            return .ignore
+        default: return .ignore
+        }
     }
 }

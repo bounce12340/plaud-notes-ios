@@ -12,6 +12,8 @@ xcuserdata/
 *.opus
 # 例外：ffmpeg 合成的 2 秒測試音（非錄音），模擬 Plaud Web 匯出格式
 !app/PlaudNotesTests/Fixtures/plaud_sample.mp3
+# 例外：espeak-ng 合成的英文語音（非錄音），給 ElevenLabs 實際轉錄測試用
+!app/PlaudNotesTests/Fixtures/speech_sample.mp3
 bench/out/
 bench/ref/
 .env

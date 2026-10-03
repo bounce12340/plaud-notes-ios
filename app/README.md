@@ -6,6 +6,7 @@
 - 錄音清單（JSON 暫存，之後改 SwiftData）
 - 從「檔案」匯入音檔（複製到 App 容器）；Plaud Web 匯出的 MP3 會從檔名「MM-DD」取錄音日期
 - 重新命名、產生筆記後由 AI 建議標題（確認後套用）
+- 筆記串流顯示、依逐字稿建議範本（新增「報告／簡報」）、預設詞庫（台灣藥政法規、簡轉繁常見誤轉）
 - App 內建錄音：AAC M4A、48 kHz 單聲道、背景錄音、暫停／繼續、來電中斷處理
 - ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示
 - 逐字稿與筆記分享為 Markdown 或 Word（.docx；自寫 ZIP＋WordprocessingML，無第三方套件）
@@ -15,7 +16,7 @@
 - 單元測試：ElevenLabs 解析、OpenCC 官方案例、LLM 請求／回應、範本與分段、docx 結構與內容、檔名日期、標題建議、MP3 匯入
 
 ## 尚未包含
-Share Extension、長音檔分段上傳與續跑、本機轉錄（WhisperKit／FluidAudio）、串流輸出。
+Share Extension、長音檔分段上傳與續跑、本機轉錄（WhisperKit／FluidAudio）。
 
 ## 在 Mac mini 上建置
 ```bash

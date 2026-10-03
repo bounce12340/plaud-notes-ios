@@ -25,6 +25,8 @@ struct RecordingDetailView: View {
     @State private var newTitle = ""
     @State private var titleSuggestion: String?
     @State private var confirmTitle = false
+    /// 串流中的筆記（產生完成後清掉，改顯示存好的 notes）
+    @State private var streamingNotes: String?
 
     /// 清單中最新的資料（手動改日期／備註後會更新）
     private var current: RecordingItem { library.item(id: item.id) ?? item }
@@ -153,6 +155,24 @@ struct RecordingDetailView: View {
                                             set: { templateID = $0 })) {
                 ForEach(templates.all) { Text($0.name).tag($0.id) }
             }
+            if let t = transcript, let s = TemplateSuggester.suggest(for: t),
+               let suggested = NoteTemplate.builtIn(named: s.templateName) {
+                let selected = templateID ?? settings.defaultTemplateID
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("建議範本：\(s.templateName)").font(.subheadline)
+                        Spacer()
+                        if selected == suggested.id {
+                            Text("已選用").font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Button("套用") { templateID = suggested.id }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                    Text(s.reason + "（依說話比例與用詞推測，可自行更改）")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Picker("輸出語言", selection: $noteLanguage) {
                 ForEach(NoteLanguage.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -175,6 +195,12 @@ struct RecordingDetailView: View {
                     .font(.caption).foregroundStyle(.orange)
             }
         }
+        if let streamingNotes {
+            Section("筆記（產生中…）") {
+                Text(Self.renderMarkdown(streamingNotes))
+                    .textSelection(.enabled)
+            }
+        }
         if let suggestion = titleSuggestion {
             Section {
                 Text(suggestion).font(.headline)
@@ -190,7 +216,7 @@ struct RecordingDetailView: View {
                 Text("目前標題：\(current.title)。套用後，原檔名會記在備註；筆記內的標題要重新產生筆記才會更新。")
             }
         }
-        if let notes {
+        if let notes, streamingNotes == nil {
             Section {
                 ShareLink("分享 Markdown", item: notes, preview: SharePreview("\(current.title)-筆記.md"))
                 ShareLink("分享 Word（.docx）",
@@ -241,6 +267,8 @@ struct RecordingDetailView: View {
             if let mode = settings.chineseConversion.mode {
                 busy = "簡→繁轉換中…"
                 t = await Self.convert(t, mode: mode)
+                // 轉換後再套一次更正：詞庫用繁體寫的錯誤寫法，要等轉成繁體後才比對得到
+                t = Glossary.apply(to: t, entries: glossary.entries)
             }
             transcript = t
             library.saveTranscript(t, for: item)
@@ -252,8 +280,9 @@ struct RecordingDetailView: View {
     private func reconvert(_ mode: ChineseConverter.Mode) {
         guard let t = transcript else { return }
         busy = "簡→繁轉換中…"
+        let entries = glossary.entries
         Task {
-            let converted = await Self.convert(t, mode: mode)
+            let converted = Glossary.apply(to: await Self.convert(t, mode: mode), entries: entries)
             transcript = converted
             library.saveTranscript(converted, for: item)
             busy = nil
@@ -273,7 +302,7 @@ struct RecordingDetailView: View {
         let tid = templateID ?? settings.defaultTemplateID
         guard let template = templates.template(id: tid) else { error = "找不到範本"; return }
         busy = "產生筆記中…"; error = nil
-        defer { busy = nil }
+        defer { busy = nil; streamingNotes = nil }
         do {
             let config = settings.llm
             let client = try LLMClientFactory.make(config: config,
@@ -285,7 +314,17 @@ struct RecordingDetailView: View {
                                                             transcript: transcript, template: template,
                                                             outputLanguage: outLang,
                                                             glossary: glossary.entries.map(\.term),
-                                                            remark: info.trimmedRemark))
+                                                            remark: info.trimmedRemark)) { progress in
+                switch progress {
+                case .summarizing(let done, let total):
+                    busy = done < total ? "分段整理中（\(done + 1)/\(total)）…" : "合併各段重點…"
+                case .thinking(let characters):
+                    busy = "模型思考中（已思考 \(characters) 字）…"
+                case .writing(let text):
+                    busy = "筆記產生中（\(text.count) 字）…"
+                    streamingNotes = text
+                }
+            }
             var md = result.markdown
             // 中文輸出再過一次簡→繁，避免模型混入簡體字
             if noteLanguage == .zhTW, let mode = settings.chineseConversion.mode,
@@ -295,6 +334,7 @@ struct RecordingDetailView: View {
             }
             let footer = "\n\n---\n由 \(config.model)（\(config.host)）依範本「\(template.name)」產生；逐字稿分 \(result.chunkCount) 段處理。內容可能有誤，請對照原音確認。\n"
             notes = md + footer
+            streamingNotes = nil
             library.saveNotes(md + footer, for: item)
         } catch {
             self.error = error.localizedDescription

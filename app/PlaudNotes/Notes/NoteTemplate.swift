@@ -47,6 +47,16 @@ extension NoteTemplate {
         ## 講者引述
         ## 延伸問題
         """, isBuiltIn: true),
+        NoteTemplate(id: UUID(uuidString: "6B0F2E0A-0005-4000-8000-000000000005")!, name: "報告／簡報", prompt: """
+        請把以下工作報告或簡報的逐字稿整理成報告摘要，使用 Markdown，依序包含：
+        ## 報告資訊（主題：{{title}}；日期：{{date}}；報告人與與會者：{{speakers}}）
+        ## 報告大綱
+        ## 重點內容（依報告段落分小節，每點附時間戳）
+        ## 數據與成果（表格：項目｜數字｜比較基準或期間｜時間戳；逐字稿沒提到的欄位填「未提及」）
+        ## 做法與經驗（具體做了什麼、為什麼有效）
+        ## 困難與因應
+        ## 提問、回饋與後續事項（若沒有就寫「無」）
+        """, isBuiltIn: true),
         NoteTemplate(id: UUID(uuidString: "6B0F2E0A-0004-4000-8000-000000000004")!, name: "一般摘要", prompt: """
         請把以下逐字稿整理成摘要，使用 Markdown，依序包含：
         ## TL;DR（3 句以內）
@@ -54,6 +64,8 @@ extension NoteTemplate {
         ## 待辦事項（若沒有就寫「無」）
         """, isBuiltIn: true),
     ]
+
+    static func builtIn(named name: String) -> NoteTemplate? { builtIns.first { $0.name == name } }
 
     static func newCustom() -> NoteTemplate {
         NoteTemplate(id: UUID(), name: "自訂範本", prompt: """
