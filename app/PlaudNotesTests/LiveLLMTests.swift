@@ -60,6 +60,42 @@ final class LiveLLMTests: XCTestCase {
         print("LIVE[stream] updates=\(updates) thinking=\(sawThinking)")
     }
 
+    // MARK: - Ollama Cloud
+
+    /// CI 只在手動觸發且勾選 live_llm 時，從 repo secret OLLAMA_API_KEY 提供
+    private func ollamaClient() throws -> LLMClient {
+        let k = ProcessInfo.processInfo.environment["OLLAMA_API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !k.isEmpty else { throw XCTSkip("未提供 OLLAMA_API_KEY，略過實際呼叫") }
+        let config = LLMConfig(preset: try XCTUnwrap(LLMPreset.find("ollama-cloud")))
+        return try LLMClientFactory.make(config: config, apiKey: k)
+    }
+
+    @MainActor
+    func testOllamaCloudStreamingNotes() async throws {
+        let c = try ollamaClient()
+        var pieces = 0
+        for try await d in c.stream([ChatMessage(role: .user, content: "用繁體中文寫三句話介紹台北。")]) {
+            if case .content = d { pieces += 1 }
+        }
+        XCTAssertGreaterThan(pieces, 1, "Ollama Cloud 串流應分多個片段送達")
+
+        let gen = NoteGenerator(client: c, maxInputCharacters: 60_000)
+        var updates = 0
+        var sawThinking = false
+        var lastText = ""
+        let result = try await gen.generate(Self.request()) { p in
+            switch p {
+            case .thinking: sawThinking = true
+            case .writing(let t): updates += 1; lastText = t
+            case .summarizing: break
+            }
+        }
+        try check(result, label: "ollama-stream")
+        XCTAssertEqual(lastText, result.markdown)
+        print("LIVE[ollama-stream] pieces=\(pieces) updates=\(updates) thinking=\(sawThinking)")
+    }
+
     // MARK: - Anthropic（Claude）
 
     /// CI 只在手動觸發且勾選 live_llm 時，從 repo secret ANTHROPIC_API_KEY 提供

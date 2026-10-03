@@ -82,6 +82,10 @@ struct LLMPreset: Identifiable, Hashable, Sendable {
                   baseURL: "https://openrouter.ai/api/v1", defaultModel: "",
                   requiresKey: true, maxInputCharacters: 60_000,
                   note: "模型名稱格式如「供應商/模型」。"),
+        LLMPreset(id: "ollama-cloud", name: "Ollama Cloud", style: .openAICompatible,
+                  baseURL: "https://ollama.com/v1", defaultModel: "gpt-oss:20b",
+                  requiresKey: true, maxInputCharacters: 60_000,
+                  note: "ollama.com 的雲端模型（OpenAI 相容端點，依官方文件 2026-10-04）。模型名稱以 ollama.com 清單為準，例如 gpt-oss:20b、gpt-oss:120b。"),
         LLMPreset(id: "ollama", name: "Ollama（自架 gpt-oss）", style: .openAICompatible,
                   baseURL: "http://mac-mini.local:11434/v1", defaultModel: "gpt-oss:20b",
                   requiresKey: false, maxInputCharacters: 40_000,
@@ -351,7 +355,7 @@ enum SSE {
         if payload == "[DONE]" { return .done }
         struct Chunk: Decodable {
             struct Choice: Decodable {
-                struct Delta: Decodable { let content: String?; let reasoning_content: String? }
+                struct Delta: Decodable { let content: String?; let reasoning_content: String?; let reasoning: String? }
                 let delta: Delta?
             }
             struct Err: Decodable { let message: String? }
@@ -362,7 +366,8 @@ enum SSE {
         if let e = c.error { throw LLMError.http(0, String((e.message ?? "串流中斷").prefix(300))) }
         let d = c.choices?.first?.delta
         if let text = d?.content, !text.isEmpty { return .delta(.content(text)) }
-        if let text = d?.reasoning_content, !text.isEmpty { return .delta(.reasoning(text)) }
+        // DeepSeek 用 reasoning_content；Ollama 的 OpenAI 相容端點用 reasoning
+        if let text = d?.reasoning_content ?? d?.reasoning, !text.isEmpty { return .delta(.reasoning(text)) }
         return .ignore
     }
 

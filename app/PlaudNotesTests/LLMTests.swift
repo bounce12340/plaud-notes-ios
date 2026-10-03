@@ -183,6 +183,8 @@ final class LLMTests: XCTestCase {
         XCTAssertTrue(done)
         XCTAssertEqual(content, "台北是台灣的政治、經濟與文化中心，也是一座充滿活力的現代都市。這裡有台北101、故宮博物院、夜市小吃與便捷捷運，融合傳統底蘊與創新風貌，展現獨特的城市魅力。")
         XCTAssertNil(SSE.payload(": keep-alive"))
+        // Ollama 的 OpenAI 相容端點把思考放在 reasoning 欄位
+        XCTAssertEqual(try SSE.openAIDelta(#"{"choices":[{"delta":{"content":"","reasoning":"想"}}]}"#), .delta(.reasoning("想")))
         XCTAssertThrowsError(try SSE.openAIDelta(#"{"error":{"message":"rate limited"}}"#))
     }
 
