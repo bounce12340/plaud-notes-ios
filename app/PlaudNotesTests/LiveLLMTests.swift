@@ -45,7 +45,7 @@ final class LiveLLMTests: XCTestCase {
     private func check(_ result: NoteGenerator.Result, label: String) throws {
         var md = result.markdown
         if let conv = try? ChineseConverter(mode: .s2tw, bundle: Bundle(for: RecordingLibrary.self)) {
-            md = conv.convert(md)
+            md = conv.convertWithFixups(md)
         }
         XCTAssertTrue(md.contains("##"), "應依範本輸出 Markdown 標題")
         XCTAssertTrue(md.contains("決議"), "會議記錄範本應有「決議事項」")

@@ -291,7 +291,7 @@ struct RecordingDetailView: View {
             if noteLanguage == .zhTW, let mode = settings.chineseConversion.mode,
                let conv = await ChineseConverterCache.shared.converter(mode) {
                 let raw = md
-                md = await Task.detached { conv.convert(raw) }.value
+                md = await Task.detached { conv.convertWithFixups(raw) }.value
             }
             let footer = "\n\n---\n由 \(config.model)（\(config.host)）依範本「\(template.name)」產生；逐字稿分 \(result.chunkCount) 段處理。內容可能有誤，請對照原音確認。\n"
             notes = md + footer
@@ -317,7 +317,7 @@ struct RecordingDetailView: View {
             if noteLanguage == .zhTW, let mode = settings.chineseConversion.mode,
                let conv = await ChineseConverterCache.shared.converter(mode) {
                 let raw = title
-                title = await Task.detached { conv.convert(raw) }.value
+                title = await Task.detached { conv.convertWithFixups(raw) }.value
             }
             titleSuggestion = title == current.title ? nil : title
         } catch {
