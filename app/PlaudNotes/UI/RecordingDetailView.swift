@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RecordingDetailView: View {
     @Environment(RecordingLibrary.self) private var library
@@ -253,14 +254,21 @@ struct RecordingDetailView: View {
         guard let key = KeychainStore.get("elevenlabs"), !key.isEmpty else {
             error = ProviderError.missingAPIKey.localizedDescription; return
         }
-        busy = "轉錄中…"; error = nil
-        defer { busy = nil }
+        busy = "準備上傳…"; error = nil
+        // 切到其他 App 時多爭取一點時間（系統通常只給約 30 秒）
+        let background = BackgroundTaskToken(name: "transcribe")
+        defer { busy = nil; background.end() }
         do {
+            // 高位元率的大檔先壓縮再傳；用完刪除暫存檔
+            let source = library.url(for: item)
+            let compacted = await AudioCompactor.compactIfNeeded(source) { busy = TranscriptionProgress.compacting($0).label }
+            defer { if let compacted { try? FileManager.default.removeItem(at: compacted) } }
             let provider = ElevenLabsProvider(apiKey: key)
             var t = try await provider.transcribe(
-                fileURL: library.url(for: item),
+                fileURL: compacted ?? source,
                 options: TranscriptionOptions(languageCode: language == "auto" ? nil : language,
-                                              keyterms: glossary.entries.map(\.term)))
+                                              keyterms: glossary.entries.map(\.term)),
+                onProgress: { busy = $0.label })
             t = Glossary.apply(to: t, entries: glossary.entries)
             // 重新轉錄時保留已設定的說話者名稱
             t.speakerNames = transcript?.speakerNames
@@ -375,5 +383,23 @@ struct RecordingDetailView: View {
         }
         library.rename(id: item.id, title: title)
         titleSuggestion = nil
+    }
+}
+
+/// UIApplication 背景執行時間；時間到或工作結束時歸還，避免 App 因逾時被系統終止。
+@MainActor
+private final class BackgroundTaskToken {
+    private var id: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

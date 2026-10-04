@@ -22,4 +22,31 @@ final class LiveTranscriptionTests: XCTestCase {
         XCTAssertFalse(t.segments.isEmpty)
         XCTAssertLessThan(t.segments.last?.end ?? 99, 10, "時間戳應在音檔長度內")
     }
+
+    /// iPhone 編碼器壓出的 16 kHz 單聲道 AAC 要能被 ElevenLabs 接受，內容不變；同時走從暫存檔上傳的流程
+    func testElevenLabsTranscribesCompactedAudio() async throws {
+        let key = ProcessInfo.processInfo.environment["ELEVENLABS_API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !key.isEmpty else { throw XCTSkip("未提供 ELEVENLABS_API_KEY，略過實際呼叫") }
+        let src = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "speech_sample", withExtension: "mp3"))
+        let dst = FileManager.default.temporaryDirectory.appending(path: "live-compact-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: dst) }
+        let bitRate = try await AudioCompactor.compact(src, to: dst, duration: 7)
+
+        let log = LiveProgressLog()
+        let t = try await ElevenLabsProvider(apiKey: key)
+            .transcribe(fileURL: dst, options: TranscriptionOptions(), onProgress: { log.add($0) })
+        let text = t.plainText.lowercased()
+        let progress = await log.items
+        print("LIVE[elevenlabs-compact] bitRate=\(bitRate) progress=\(progress.map(\.label)) text=\(t.plainText)")
+        XCTAssertTrue(text.contains("budget"), text)
+        XCTAssertTrue(text.contains("friday"), text)
+        XCTAssertEqual(progress.last, .processing)
+    }
+}
+
+@MainActor
+private final class LiveProgressLog {
+    private(set) var items: [TranscriptionProgress] = []
+    func add(_ p: TranscriptionProgress) { items.append(p) }
 }

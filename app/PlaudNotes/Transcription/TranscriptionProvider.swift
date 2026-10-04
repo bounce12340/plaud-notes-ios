@@ -42,9 +42,42 @@ struct TranscriptionOptions: Sendable {
     var keyterms: [String] = []
 }
 
+/// 轉錄進度（給畫面顯示）
+enum TranscriptionProgress: Sendable, Equatable {
+    /// 上傳前壓縮音檔，0...1
+    case compacting(Double)
+    /// 上傳中，0...1
+    case uploading(Double)
+    /// 已上傳完畢，等伺服器轉錄
+    case processing
+    /// 連線失敗，第 attempt 次嘗試（共 of 次）
+    case retrying(attempt: Int, of: Int)
+}
+
+extension TranscriptionProgress {
+    /// 畫面上的狀態文字
+    var label: String {
+        switch self {
+        case .compacting(let f): "壓縮音檔中（\(Int(f * 100))%）…"
+        case .uploading(let f): "上傳中（\(Int(f * 100))%）…"
+        case .processing: "伺服器轉錄中…"
+        case .retrying(let attempt, let total): "暫時失敗，重試中（第 \(attempt)/\(total) 次）…"
+        }
+    }
+}
+
+typealias TranscriptionProgressHandler = @MainActor @Sendable (TranscriptionProgress) -> Void
+
 /// 轉錄引擎抽象：本機（WhisperKit / FluidAudio / SpeechAnalyzer）與雲端（ElevenLabs…）都實作它。
 protocol TranscriptionProvider: Sendable {
     var id: String { get }
     var isOnDevice: Bool { get }
-    func transcribe(fileURL: URL, options: TranscriptionOptions) async throws -> Transcript
+    func transcribe(fileURL: URL, options: TranscriptionOptions,
+                    onProgress: TranscriptionProgressHandler?) async throws -> Transcript
+}
+
+extension TranscriptionProvider {
+    func transcribe(fileURL: URL, options: TranscriptionOptions) async throws -> Transcript {
+        try await transcribe(fileURL: fileURL, options: options, onProgress: nil)
+    }
 }

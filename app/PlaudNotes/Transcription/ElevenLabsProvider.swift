@@ -1,23 +1,56 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// ElevenLabs Scribe 轉錄（雲端，使用者自己的 API key）。
 /// API：POST https://api.elevenlabs.io/v1/speech-to-text（2026-09-30 依官方文件）
-/// 注意：目前整個檔案讀進記憶體再上傳；3 小時約 180 MB，M1 要改成串流上傳或先轉低位元率再切段。
+///
+/// 長音檔整檔上傳、不切段：官方上限 3 GB／10 小時，超過 8 分鐘的檔案伺服器會自己切段平行處理
+/// （2026-10-04 查閱 Speech to Text capabilities 文件）。App 自己切段的話，每段的說話者代號會各自重新編號。
+/// 請求本文先寫到暫存檔再從檔案上傳，不把整個音檔讀進記憶體。
 struct ElevenLabsProvider: TranscriptionProvider {
     let id = "elevenlabs"
     let isOnDevice = false
     var model = "scribe_v2"
     let apiKey: String
     var session: URLSession = .shared
+    var endpoint = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!
+    var retryDelay: @Sendable (Int) -> Duration = UploadRetry.delay(afterAttempt:)
 
-    func transcribe(fileURL: URL, options: TranscriptionOptions) async throws -> Transcript {
-        let request = try makeRequest(fileURL: fileURL, options: options)
-        let (data, response) = try await session.upload(for: request.urlRequest, from: request.body)
-        guard let http = response as? HTTPURLResponse else { throw ProviderError.badResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            throw ProviderError.http(http.statusCode, String(decoding: data.prefix(300), as: UTF8.self))
+    func transcribe(fileURL: URL, options: TranscriptionOptions,
+                    onProgress: TranscriptionProgressHandler?) async throws -> Transcript {
+        let boundary = UUID().uuidString
+        let bodyURL = FileManager.default.temporaryDirectory
+            .appending(path: "elevenlabs-\(UUID().uuidString).multipart")
+        defer { try? FileManager.default.removeItem(at: bodyURL) }
+        try Multipart.writeBody(to: bodyURL, boundary: boundary,
+                                fields: Self.formFields(model: model, options: options),
+                                fileField: "file", fileURL: fileURL)
+        let request = makeRequest(boundary: boundary)
+
+        var attempt = 1
+        while true {
+            let observer = UploadObserver(onProgress: onProgress)
+            do {
+                let (data, response) = try await session.upload(for: request, fromFile: bodyURL, delegate: observer)
+                await observer.finish()
+                guard let http = response as? HTTPURLResponse else { throw ProviderError.badResponse }
+                guard (200..<300).contains(http.statusCode) else {
+                    throw ProviderError.http(http.statusCode, String(decoding: data.prefix(300), as: UTF8.self))
+                }
+                return try Self.parse(data)
+            } catch {
+                await observer.finish()
+                let sent = observer.bodyFullySent
+                guard attempt < UploadRetry.maxAttempts, UploadRetry.shouldRetry(error, bodyFullySent: sent) else {
+                    throw UploadRetry.finalError(error, bodyFullySent: sent)
+                }
+                attempt += 1
+                await onProgress?(.retrying(attempt: attempt, of: UploadRetry.maxAttempts))
+                try await Task.sleep(for: retryDelay(attempt - 1))
+            }
         }
-        return try Self.parse(data)
     }
 
     /// 表單欄位。`keyterms` 每個詞各送一個欄位（2026-09-30 實測：送 JSON 陣列會回 400）。
@@ -34,21 +67,14 @@ struct ElevenLabsProvider: TranscriptionProvider {
         return fields
     }
 
-    struct PreparedRequest { let urlRequest: URLRequest; let body: Data }
-
-    func makeRequest(fileURL: URL, options: TranscriptionOptions) throws -> PreparedRequest {
-        let fields = Self.formFields(model: model, options: options)
-
-        let boundary = UUID().uuidString
-        var request = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!)
+    func makeRequest(boundary: String) -> URLRequest {
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        // 閒置逾時：上傳完後伺服器處理期間不會送任何資料（3 小時錄音約數分鐘）
         request.timeoutInterval = 3600
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-
-        let body = try Multipart.body(boundary: boundary, fields: fields,
-                                      fileField: "file", fileURL: fileURL)
-        return PreparedRequest(urlRequest: request, body: body)
+        return request
     }
 
     // MARK: - 回應解析（字詞 → 依說話者與句子合併成段落）
@@ -122,31 +148,44 @@ enum ProviderError: LocalizedError {
     case badResponse
     case http(Int, String)
     case missingAPIKey
+    /// 音檔已全部送出，但等結果時連線中斷：伺服器可能已經轉錄並計費，所以不自動重送
+    case interruptedAfterUpload(String)
 
     var errorDescription: String? {
         switch self {
         case .badResponse: "伺服器回應格式錯誤"
         case .http(let code, let msg): "HTTP \(code)：\(msg)"
         case .missingAPIKey: "尚未設定 API key"
+        case .interruptedAfterUpload(let msg):
+            "音檔已上傳完畢，但等待轉錄結果時連線中斷（\(msg)）。伺服器可能已處理並計費，因此沒有自動重送；請確認網路後再按一次轉錄。"
         }
     }
 }
 
 enum Multipart {
-    static func body(boundary: String, fields: [(String, String)],
-                     fileField: String, fileURL: URL) throws -> Data {
-        var d = Data()
+    /// 把 multipart 本文寫到 `destination`，音檔以 1 MB 為單位複製，不整個讀進記憶體。回傳本文大小。
+    @discardableResult
+    static func writeBody(to destination: URL, boundary: String, fields: [(String, String)],
+                          fileField: String, fileURL: URL, chunkSize: Int = 1 << 20) throws -> Int64 {
+        guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: destination.path])
+        }
+        let out = try FileHandle(forWritingTo: destination)
+        defer { try? out.close() }
+        let input = try FileHandle(forReadingFrom: fileURL)
+        defer { try? input.close() }
+
+        var head = ""
         for (k, v) in fields {
-            d.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(k)\"\r\n\r\n\(v)\r\n")
+            head += "--\(boundary)\r\nContent-Disposition: form-data; name=\"\(k)\"\r\n\r\n\(v)\r\n"
         }
         let name = fileURL.lastPathComponent
-        d.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(fileField)\"; filename=\"\(name)\"\r\nContent-Type: application/octet-stream\r\n\r\n")
-        d.append(try Data(contentsOf: fileURL))
-        d.append("\r\n--\(boundary)--\r\n")
-        return d
+        head += "--\(boundary)\r\nContent-Disposition: form-data; name=\"\(fileField)\"; filename=\"\(name)\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+        try out.write(contentsOf: Data(head.utf8))
+        while let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty {
+            try out.write(contentsOf: chunk)
+        }
+        try out.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
+        return Int64(try out.offset())
     }
-}
-
-private extension Data {
-    mutating func append(_ s: String) { append(Data(s.utf8)) }
 }
