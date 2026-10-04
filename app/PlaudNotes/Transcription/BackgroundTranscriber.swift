@@ -171,7 +171,7 @@ final class BackgroundTranscriber: NSObject, URLSessionDataDelegate, Sendable {
         let final = UploadRetry.finalError(err, bodyFullySent: sent)
         let message = (final as? URLError)?.code == .cancelled
             ? "上傳被取消（可能是 App 被從多工畫面關閉）。請重新轉錄。"
-            : final.localizedDescription
+            : Self.describe(final)
         fail(id, message: message)
     }
 
@@ -196,6 +196,17 @@ final class BackgroundTranscriber: NSObject, URLSessionDataDelegate, Sendable {
             return .failure(ProviderError.http(http.statusCode, String(decoding: data.prefix(300), as: UTF8.self)))
         }
         return .success
+    }
+
+    /// 錯誤說明附上代碼（例如「unknown error（NSURLErrorDomain -1）」），方便判斷原因
+    static func describe(_ error: Error) -> String {
+        if error is ProviderError { return error.localizedDescription }
+        let ns = error as NSError
+        var text = "\(ns.localizedDescription)（\(ns.domain) \(ns.code)"
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+            text += "；\(underlying.domain) \(underlying.code)"
+        }
+        return text + "）"
     }
 
     private func fail(_ id: UUID, message: String) {
