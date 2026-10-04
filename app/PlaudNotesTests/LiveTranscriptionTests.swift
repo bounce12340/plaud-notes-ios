@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import PlaudNotes
 
@@ -69,6 +70,46 @@ extension LiveTranscriptionTests {
         print("LIVE[elevenlabs-background] final=\(final) events=\(log.events.count)")
         XCTAssertEqual(final, .finished(id))
         let t = try ElevenLabsProvider.parse(Data(contentsOf: transcriber.store.responseURL(id)))
+        XCTAssertTrue(t.plainText.lowercased().contains("budget"), t.plainText)
+    }
+}
+
+extension LiveTranscriptionTests {
+    /// 錄音格式（AAC ADTS .aac）要能被 ElevenLabs 接受
+    func testElevenLabsAcceptsRecordingFormat() async throws {
+        let key = ProcessInfo.processInfo.environment["ELEVENLABS_API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !key.isEmpty else { throw XCTSkip("未提供 ELEVENLABS_API_KEY，略過實際呼叫") }
+        let src = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "speech_sample", withExtension: "mp3"))
+        let dst = FileManager.default.temporaryDirectory.appending(path: "live-adts-\(UUID().uuidString).aac")
+        defer { try? FileManager.default.removeItem(at: dst) }
+        do {
+            let input = try AVAudioFile(forReading: src)
+            let output = try AVAudioFile(forWriting: dst, settings: Recorder.settings)
+            let converter = try XCTUnwrap(AVAudioConverter(from: input.processingFormat, to: output.processingFormat))
+            let inBuf = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: input.processingFormat,
+                                                       frameCapacity: AVAudioFrameCount(input.length)))
+            try input.read(into: inBuf)
+            let ratio = output.processingFormat.sampleRate / input.processingFormat.sampleRate
+            let outBuf = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: output.processingFormat,
+                                                        frameCapacity: AVAudioFrameCount(Double(inBuf.frameLength) * ratio) + 4096))
+            nonisolated(unsafe) var fed = false
+            nonisolated(unsafe) let source = inBuf
+            var error: NSError?
+            _ = converter.convert(to: outBuf, error: &error) { _, status in
+                if fed { status.pointee = .endOfStream; return nil }
+                fed = true
+                status.pointee = .haveData
+                return source
+            }
+            if let error { throw error }
+            try output.write(from: outBuf)
+            output.close()
+        }
+        let scan = try ADTS.scan(dst)
+        let t = try await ElevenLabsProvider(apiKey: key).transcribe(fileURL: dst, options: TranscriptionOptions())
+        print("LIVE[elevenlabs-adts] frames=\(scan.frames) duration=\(scan.duration) text=\(t.plainText)")
+        XCTAssertGreaterThan(scan.frames, 0)
         XCTAssertTrue(t.plainText.lowercased().contains("budget"), t.plainText)
     }
 }

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(RecordingLibrary.self) private var library
-    @State private var recorder = Recorder()
+    @Environment(Recorder.self) private var recorder
     @State private var showImporter = false
     @State private var showSettings = false
 
@@ -69,12 +69,18 @@ private struct RecorderSection: View {
                 case .recording:
                     Button("暫停", systemImage: "pause.circle") { recorder.pause() }
                     Button("停止", systemImage: "stop.circle") { stop() }
-                case .paused:
+                case .paused, .interrupted:
                     Button("繼續", systemImage: "play.circle") { recorder.resume() }
                     Button("停止", systemImage: "stop.circle") { stop() }
                 }
             }
             .buttonStyle(.bordered)
+            if let notice = recorder.notice {
+                Text(notice).font(.caption).foregroundStyle(.orange)
+            } else if recorder.state == .recording {
+                Text("可以關閉螢幕或切到其他 App，錄音會繼續。不要從多工畫面滑掉 App。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
