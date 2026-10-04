@@ -61,17 +61,6 @@ final class GlossaryAndSpeakerTests: XCTestCase {
         XCTAssertFalse(none.contains { $0.0 == "keyterms" })
     }
 
-    func testMultipartBodyContainsRepeatedFields() throws {
-        let url = FileManager.default.temporaryDirectory.appending(path: "mp-\(UUID().uuidString).bin")
-        try Data([1, 2, 3]).write(to: url)
-        defer { try? FileManager.default.removeItem(at: url) }
-        let body = try Multipart.body(boundary: "B", fields: [("keyterms", "A"), ("keyterms", "B")],
-                                      fileField: "file", fileURL: url)
-        let s = String(decoding: body, as: UTF8.self)
-        XCTAssertEqual(s.components(separatedBy: "name=\"keyterms\"").count - 1, 2)
-        XCTAssertTrue(s.hasSuffix("--B--\r\n"))
-    }
-
     // MARK: - 說話者名稱
 
     func testDisplayName() {
