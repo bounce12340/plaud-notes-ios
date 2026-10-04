@@ -85,6 +85,7 @@ private struct RecorderSection: View {
     }
 
     private func stop() {
-        if let item = recorder.stop() { library.add(item) }
+        recorder.stop()
+        RecordingRecovery.recover(into: library, skipping: nil)
     }
 }

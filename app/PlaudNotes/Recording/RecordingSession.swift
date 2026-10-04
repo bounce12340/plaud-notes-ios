@@ -9,6 +9,8 @@ struct RecordingSession: Codable, Equatable, Sendable {
     let id: UUID
     let startedAt: Date
     var parts: [String] = []
+    /// 使用者按了停止（相對於 App 中途被終止）；舊記錄檔沒有這個欄位
+    var stopped: Bool? = nil
 
     var fileName: String { "\(id.uuidString).aac" }
 
@@ -46,9 +48,10 @@ enum RecordingSessionStore {
         var duration: Double
     }
 
-    /// 把各段接成 `<id>.aac`（捨棄最後一格不完整的資料），刪除分段與記錄。完全沒有錄到聲音就回傳 nil。
+    /// 把各段接成 `<id>.aac`（捨棄最後一格不完整的資料），刪除分段。完全沒有錄到聲音就回傳 nil。
     /// 每一步都可以在中途被終止：先換成合併後的檔案、更新記錄，再刪其他分段。
-    static func finalize(_ session: RecordingSession, in dir: URL) throws -> Finalized? {
+    /// 記錄檔由呼叫端在錄音確實加進清單後才刪（`keepMarker`），清單存檔失敗時下次還能再救回。
+    static func finalize(_ session: RecordingSession, in dir: URL, keepMarker: Bool = false) throws -> Finalized? {
         let fm = FileManager.default
         let dest = dir.appending(path: session.fileName)
         let parts = session.parts.map { dir.appending(path: $0) }.filter { fm.fileExists(atPath: $0.path) }
@@ -73,11 +76,12 @@ enum RecordingSessionStore {
             try save(merged, in: dir)
             for p in parts where p != dest { try? fm.removeItem(at: p) }
         }
-        remove(session.id, in: dir)
         guard scan.frames > 0 else {
+            remove(session.id, in: dir)
             try? fm.removeItem(at: dest)
             return nil
         }
+        if !keepMarker { remove(session.id, in: dir) }
         return Finalized(fileName: session.fileName, duration: scan.duration)
     }
 }

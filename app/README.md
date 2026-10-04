@@ -7,7 +7,7 @@
 - 從「檔案」匯入音檔（複製到 App 容器）；Plaud Web 匯出的 MP3 會從檔名「MM-DD」取錄音日期
 - 重新命名、產生筆記後由 AI 建議標題（確認後套用）
 - 筆記串流顯示、依逐字稿建議範本（新增「報告／簡報」）、預設詞庫（台灣藥政法規、簡轉繁常見誤轉）
-- App 內建錄音：AAC 48 kHz 單聲道（ADTS .aac，閃退後可救回）、螢幕關閉時持續錄音、暫停／繼續、中斷結束後自動繼續
+- App 內建錄音：AAC 48 kHz 單聲道（ADTS .aac，閃退後可救回）、螢幕關閉時持續錄音、暫停／繼續、中斷結束後自動繼續、鎖定畫面與動態島即時動態（錄音時間、停止按鈕）
 - ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示；長音檔從磁碟串流上傳、高位元率大檔先壓成 16 kHz 單聲道 AAC、顯示上傳進度、暫時性失敗自動重送；以系統背景上傳執行，螢幕關閉或 App 被暫停時繼續，完成後通知
 - 逐字稿與筆記分享為 Markdown 或 Word（.docx；自寫 ZIP＋WordprocessingML，無第三方套件）
 - 簡→繁：OpenCC 1.4.2 字典（`PlaudNotes/Resources/OpenCC`，Apache-2.0）
@@ -25,7 +25,7 @@ cd app
 xcodegen generate        # 依 project.yml 產生 PlaudNotes.xcodeproj
 open PlaudNotes.xcodeproj
 ```
-1. 在 Xcode 的 Signing & Capabilities 選自己的 Team，把 Bundle ID 改成自己的。
+1. 在 Xcode 的 Signing & Capabilities 選自己的 Team，把 Bundle ID 改成自己的。PlaudNotes 與 PlaudNotesWidgets 兩個 target 都要設定，Widget 的 Bundle ID 必須以 App 的開頭（例如 `你的ID.PlaudNotes.Widgets`）。
 2. 選 iPhone 17 實機 → Run。
 3. `⌘U` 跑單元測試。
 
