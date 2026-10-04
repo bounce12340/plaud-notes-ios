@@ -52,6 +52,8 @@ enum TranscriptionProgress: Sendable, Equatable {
     case processing
     /// 連線失敗，第 attempt 次嘗試（共 of 次）
     case retrying(attempt: Int, of: Int)
+    /// 交給系統在背景上傳中（App 重新開啟後還不知道目前進度）
+    case background
 }
 
 extension TranscriptionProgress {
@@ -62,6 +64,7 @@ extension TranscriptionProgress {
         case .uploading(let f): "上傳中（\(Int(f * 100))%）…"
         case .processing: "伺服器轉錄中…"
         case .retrying(let attempt, let total): "暫時失敗，重試中（第 \(attempt)/\(total) 次）…"
+        case .background: "背景轉錄中…"
         }
     }
 }

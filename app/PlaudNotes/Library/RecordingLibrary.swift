@@ -176,11 +176,14 @@ final class RecordingLibrary {
         return try? JSONDecoder().decode(Transcript.self, from: data)
     }
 
-    func saveTranscript(_ t: Transcript, for item: RecordingItem) {
+    @discardableResult
+    func saveTranscript(_ t: Transcript, for item: RecordingItem) -> Bool {
         do {
             try JSONEncoder().encode(t).write(to: transcriptURL(for: item), options: [.atomic, .completeFileProtection])
+            return true
         } catch {
             lastError = "儲存逐字稿失敗：\(error.localizedDescription)"
+            return false
         }
     }
 
@@ -196,12 +199,31 @@ final class RecordingLibrary {
         }
     }
 
+    /// 清單檔存在但讀不到（例如 App 在螢幕鎖定時被背景喚醒，完整保護的檔案無法讀取）。
+    /// 這時不可存檔，否則會用空清單蓋掉原本的資料；解鎖後再重新讀取。
+    private(set) var needsReload = false
+
+    func reloadIfNeeded() {
+        guard needsReload else { return }
+        load()
+    }
+
     private func load() {
-        guard let data = try? Data(contentsOf: indexURL) else { return }
-        items = (try? JSONDecoder().decode([RecordingItem].self, from: data)) ?? []
+        guard FileManager.default.fileExists(atPath: indexURL.path) else { needsReload = false; return }
+        do {
+            let data = try Data(contentsOf: indexURL)
+            items = (try? JSONDecoder().decode([RecordingItem].self, from: data)) ?? []
+            needsReload = false
+        } catch {
+            needsReload = true
+        }
     }
 
     private func save() {
+        guard !needsReload else {
+            lastError = "裝置鎖定中，暫時無法儲存清單；解鎖後請再試一次。"
+            return
+        }
         do {
             let data = try JSONEncoder().encode(items)
             try data.write(to: indexURL, options: [.atomic, .completeFileProtection])

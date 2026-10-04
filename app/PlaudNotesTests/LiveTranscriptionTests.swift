@@ -45,6 +45,34 @@ final class LiveTranscriptionTests: XCTestCase {
     }
 }
 
+extension LiveTranscriptionTests {
+    /// 真正的背景 URLSession（系統代管上傳）在模擬器上能完成請求、存下回應
+    func testBackgroundSessionTranscribesSyntheticSpeech() async throws {
+        let key = ProcessInfo.processInfo.environment["ELEVENLABS_API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !key.isEmpty else { throw XCTSkip("未提供 ELEVENLABS_API_KEY，略過實際呼叫") }
+        let audio = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "speech_sample", withExtension: "mp3"))
+        let root = FileManager.default.temporaryDirectory.appending(path: "live-jobs-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let config = URLSessionConfiguration.background(withIdentifier: "live-test-\(UUID().uuidString)")
+        config.isDiscretionary = false
+        let transcriber = BackgroundTranscriber(configuration: config, store: TranscriptionJobStore(root: root))
+        defer { transcriber.invalidate() }
+        let log = TranscriberEventLog()
+        transcriber.setEventHandler { log.append($0) }
+
+        let id = UUID()
+        try await transcriber.start(recordingID: id, audioURL: audio, provider: ElevenLabsProvider(apiKey: key),
+                                    options: TranscriptionOptions())
+        let final = try await log.waitForFinal(id, timeout: .seconds(180))
+        print("LIVE[elevenlabs-background] final=\(final) events=\(log.events.count)")
+        XCTAssertEqual(final, .finished(id))
+        let t = try ElevenLabsProvider.parse(Data(contentsOf: transcriber.store.responseURL(id)))
+        XCTAssertTrue(t.plainText.lowercased().contains("budget"), t.plainText)
+    }
+}
+
 @MainActor
 private final class LiveProgressLog {
     private(set) var items: [TranscriptionProgress] = []
