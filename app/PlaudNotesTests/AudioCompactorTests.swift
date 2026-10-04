@@ -72,8 +72,10 @@ final class AudioCompactorTests: XCTestCase {
         let asset = AVURLAsset(url: dst)
         let duration = try await asset.load(.duration).seconds
         XCTAssertEqual(duration, 30, accuracy: 0.1, "時間軸要與原檔一致")
-        let track = try await XCTUnwrap(asset.loadTracks(withMediaType: .audio).first)
-        let desc = try await XCTUnwrap(track.load(.formatDescriptions).first)
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        let track = try XCTUnwrap(tracks.first)
+        let descriptions = try await track.load(.formatDescriptions)
+        let desc = try XCTUnwrap(descriptions.first)
         let asbd = try XCTUnwrap(CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee)
         XCTAssertEqual(asbd.mSampleRate, 16_000)
         XCTAssertEqual(asbd.mChannelsPerFrame, 1)
