@@ -39,7 +39,7 @@ struct ContentView: View {
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio],
                           allowsMultipleSelection: true) { result in
-                if case .success(let urls) = result { urls.forEach(library.importFile) }
+                if case .success(let urls) = result { for url in urls { library.importFile(at: url) } }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .alert("錯誤", isPresented: .constant(library.lastError != nil || recorder.lastError != nil)) {

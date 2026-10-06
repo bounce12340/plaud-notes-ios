@@ -265,6 +265,13 @@
   - Widget 的 Bundle ID 必須以 App 的 Bundle ID 開頭（`project.yml` 已註明）。
   - 未驗證：模擬器與 CI 只能確認編譯與資料型別；實際顯示、停止按鈕與鎖定中停止後的流程需實機確認。
 
+- **v0.17 Share Extension（2026-10-06）**：使用者為付費開發者帳號，採用真正的 Share Extension（App Group 需付費帳號）。
+  - 在語音備忘錄、檔案 App、郵件附件等分享音檔時，分享面板出現「Plaud Notes」；Extension 只把音檔複製到 App Group 收件匣（`Inbox/`），不轉錄、不上傳（Extension 記憶體與時間有限）。
+  - 每筆是音檔＋說明檔（原始檔名、分享時間），說明檔最後才寫入；只有說明檔存在的才算完整，複製到一半被中斷的會在一天後清掉。
+  - 主 App 回到前景時匯入收件匣：保留原始檔名（檔名日期照舊解析），不使用收件匣複本的建立時間；確定加入清單才從收件匣刪除，清單讀不到（鎖定）時不動。
+  - App Group ID 在 `project.yml` 的 `APP_GROUP_ID` 設定一次，entitlements 與兩個 target 的 Info.plist（`PlaudNotesAppGroup`）都由它帶入。
+  - 未驗證：實機分享面板是否出現、語音備忘錄分享的檔名。
+
 ## 9. 待確認事項
 1. Plaud Web 匯出時是否還有其他格式（例如 WAV、M4A）可選？（已確認可匯出 MP3）
 2. 「DeepSeek 轉錄」使用的是哪個 App 或網站？若能提供同一段錄音的輸出，可放進基準一起比較。

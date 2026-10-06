@@ -63,21 +63,23 @@ final class RecordingLibrary {
         Self.recordingsDirectory.appending(path: item.fileName)
     }
 
-    /// 從檔案 App／分享匯入：複製一份到 App 容器，原檔不動。
-    func importFile(at source: URL) {
+    /// 從檔案 App／分享匯入：複製一份到 App 容器，原檔不動。回傳是否已加入清單。
+    /// `originalName`：分享收件匣的檔案已改名，原始檔名另外傳入；`ignoreFileDate`：來源檔的建立時間不代表錄音時間（收件匣的複本）。
+    @discardableResult
+    func importFile(at source: URL, originalName: String? = nil, ignoreFileDate: Bool = false) -> Bool {
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         let id = UUID()
         let ext = source.pathExtension.isEmpty ? "m4a" : source.pathExtension
         let dest = Self.recordingsDirectory.appending(path: "\(id.uuidString).\(ext)")
-        // 複製前先讀原檔建立時間（複製後的檔案時間是現在）
-        let fileDate = (try? source.resourceValues(forKeys: [.creationDateKey]))?.creationDate
-        let name = source.deletingPathExtension().lastPathComponent
+        // 複製前先讀原檔建立時間（複製後的檔案時間是現在）；收件匣的複本是分享當下建立的，不代表錄音時間
+        let fileDate = ignoreFileDate ? nil : (try? source.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+        let name = originalName ?? source.deletingPathExtension().lastPathComponent
         // 檔名開頭的日期（Plaud Web 匯出檔）比檔案建立時間（多半是下載時間）可靠
         let nameDate = FileNameDate.parse(name, reference: fileDate ?? .now)
         do {
             try FileManager.default.copyItem(at: source, to: dest)
-            add(RecordingItem(id: id,
+            let added = add(RecordingItem(id: id,
                               title: name,
                               fileName: dest.lastPathComponent,
                               createdAt: .now,
@@ -85,13 +87,34 @@ final class RecordingLibrary {
                               recordedAt: nameDate ?? fileDate,
                               sourceFileName: name,
                               recordedAtIsDateOnly: nameDate == nil ? nil : true))
+            guard added else {
+                try? FileManager.default.removeItem(at: dest)
+                return false
+            }
             // 音檔內嵌的錄音時間（例如語音備忘錄的 creation_time）比檔名、檔案時間可靠，有的話就覆蓋
             Task {
                 if let date = await AudioMetadata.creationDate(of: dest) { setRecordedAt(date, for: id) }
             }
+            return true
         } catch {
             lastError = "匯入失敗：\(error.localizedDescription)"
+            return false
         }
+    }
+
+    /// 匯入 Share Extension 放進收件匣的音檔；成功才從收件匣刪除。回傳匯入筆數。
+    @discardableResult
+    func importSharedInbox(from dir: URL) -> Int {
+        guard !needsReload else { return 0 }
+        var count = 0
+        for entry in SharedInbox.pending(in: dir) {
+            guard importFile(at: SharedInbox.audioURL(entry, in: dir), originalName: entry.originalName,
+                             ignoreFileDate: true) else { break }
+            SharedInbox.remove(entry, in: dir)
+            count += 1
+        }
+        SharedInbox.purgeIncomplete(in: dir)
+        return count
     }
 
     func item(id: UUID) -> RecordingItem? { items.first { $0.id == id } }

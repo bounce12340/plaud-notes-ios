@@ -56,6 +56,8 @@ struct PlaudNotesApp: App {
             glossary.reloadIfNeeded()
             // 上次錄音中途 App 被終止的話，把已錄的部分加回清單
             RecordingRecovery.recover(into: library, skipping: Recorder.shared.activeID)
+            // 從其他 App 分享進來的音檔（Share Extension 放在 App Group 收件匣）
+            if let inbox = SharedInbox.defaultDirectory { library.importSharedInbox(from: inbox) }
             Task { await transcription.processPending() }
         }
     }
