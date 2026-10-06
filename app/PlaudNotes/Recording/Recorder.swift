@@ -1,5 +1,6 @@
 import AVFoundation
 import Observation
+import UIKit
 
 /// App 內建錄音（F11）。AAC 48 kHz 單聲道 64 kbps，存成 ADTS（.aac）。
 ///
@@ -15,7 +16,9 @@ final class Recorder: NSObject {
 
     static let shared = Recorder()
 
-    private(set) var state: State = .idle
+    private(set) var state: State = .idle {
+        didSet { if state != oldValue { syncActivity() } }
+    }
     private(set) var elapsed: TimeInterval = 0
     var lastError: String?
     /// 中斷後狀態的說明，例如「通話中，結束後自動繼續」
@@ -60,6 +63,7 @@ final class Recorder: NSObject {
             notice = nil
             try startNewPart()
             setRunning(true)
+            if let startedAt = session?.startedAt { RecordingActivity.start(startedAt: startedAt) }
             state = .recording
             startTimer()
             observeAudioSession()
@@ -89,12 +93,15 @@ final class Recorder: NSObject {
         }
     }
 
-    /// 停止並回傳新的錄音項目（由呼叫端加入 RecordingLibrary）。
-    func stop() -> RecordingItem? {
-        guard let s = session else { return nil }
+    /// 停止錄音。檔案的整理與加入清單由 `RecordingRecovery.recover` 處理：
+    /// 裝置鎖定時（例如從鎖定畫面按停止）清單無法存檔，記錄檔會留著，解鎖後再加入。
+    func stop() {
+        guard var s = session else { return }
         resumeTask?.cancel()
         recorder?.stop()
         recorder = nil
+        s.stopped = true
+        try? RecordingSessionStore.save(s, in: directory)
         setRunning(false)
         timer?.invalidate()
         observers.forEach { NotificationCenter.default.removeObserver($0) }
@@ -104,17 +111,7 @@ final class Recorder: NSObject {
         elapsed = 0
         notice = nil
         session = nil
-        do {
-            guard let result = try RecordingSessionStore.finalize(s, in: directory) else {
-                lastError = "沒有錄到聲音。"
-                return nil
-            }
-            return RecordingRecovery.item(for: s, result: result, recovered: false)
-        } catch {
-            // 保留記錄檔，下次開 App 再試著救回
-            lastError = "整理錄音檔失敗：\(error.localizedDescription)。下次開啟 App 會再試一次。"
-            return nil
-        }
+        RecordingActivity.end()
     }
 
     // MARK: - 錄音器
@@ -221,6 +218,16 @@ final class Recorder: NSObject {
         autoResume()
     }
 
+    /// 鎖定畫面的即時動態跟著狀態更新（錄音中由系統自己走秒，不必每秒更新）
+    private func syncActivity() {
+        switch state {
+        case .idle: break
+        case .recording: RecordingActivity.update(.recording, elapsed: currentElapsed)
+        case .paused: RecordingActivity.update(.paused, elapsed: currentElapsed)
+        case .interrupted: RecordingActivity.update(.interrupted, elapsed: currentElapsed)
+        }
+    }
+
     // MARK: - 計時
 
     private func setRunning(_ running: Bool) {
@@ -250,26 +257,36 @@ final class Recorder: NSObject {
     }
 }
 
-/// 救回上次沒有正常結束的錄音（App 被終止、閃退、手機沒電）
+/// 把留下記錄檔的錄音整理好加入清單：正常停止的（`stopped`），以及 App 中途被終止的（標題註明「中斷後救回」）。
 enum RecordingRecovery {
+    /// 回傳加入清單的錄音數
     @MainActor
-    static func recover(into library: RecordingLibrary, skipping active: UUID?) {
-        // 清單沒讀到（裝置鎖定中）就不動，避免存檔失敗後記錄檔又被刪掉
-        guard !library.needsReload else { return }
+    @discardableResult
+    static func recover(into library: RecordingLibrary, skipping active: UUID?) -> Int {
+        // 裝置鎖定或清單沒讀到時不動：清單存不了檔，記錄檔要留到解鎖後
+        guard UIApplication.shared.isProtectedDataAvailable, !library.needsReload else { return 0 }
         let dir = RecordingLibrary.recordingsDirectory
+        var added = 0
         for session in RecordingSessionStore.pending(in: dir) where session.id != active {
-            guard library.item(id: session.id) == nil else {
+            if library.item(id: session.id) != nil {
                 RecordingSessionStore.remove(session.id, in: dir)
                 continue
             }
             do {
-                if let result = try RecordingSessionStore.finalize(session, in: dir) {
-                    library.add(item(for: session, result: result, recovered: true))
+                guard let result = try RecordingSessionStore.finalize(session, in: dir, keepMarker: true) else {
+                    if session.stopped == true { library.lastError = "沒有錄到聲音。" }
+                    continue
+                }
+                // 確定寫進清單才刪記錄檔
+                if library.add(item(for: session, result: result, recovered: session.stopped != true)) {
+                    RecordingSessionStore.remove(session.id, in: dir)
+                    added += 1
                 }
             } catch {
-                library.lastError = "救回上次的錄音失敗：\(error.localizedDescription)"
+                library.lastError = "整理錄音檔失敗：\(error.localizedDescription)。下次開啟 App 會再試一次。"
             }
         }
+        return added
     }
 
     static func item(for session: RecordingSession, result: RecordingSessionStore.Finalized,

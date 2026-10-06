@@ -17,9 +17,13 @@ targets:
     sources:
       - path: PlaudNotes
         excludes: ["Resources/OpenCC/**"]
+      # 與 Widget Extension 共用（即時動態的資料型別與停止按鈕）
+      - path: Shared
       # 資料夾參照：打包後保留 OpenCC/ 子資料夾（字典與授權檔）
       - path: PlaudNotes/Resources/OpenCC
         type: folder
+    dependencies:
+      - target: PlaudNotesWidgets
     scheme:
       testTargets: [PlaudNotesTests]
     info:
@@ -29,6 +33,8 @@ targets:
         UILaunchScreen: {}
         NSMicrophoneUsageDescription: 用來錄製會議、訪談或講座，錄音只存在這台裝置上。
         UIBackgroundModes: [audio]
+        # 錄音中在鎖定畫面與動態島顯示時間與停止按鈕
+        NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: false
@@ -36,6 +42,22 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: 用來連線到你在區域網路上自架的 AI 模型（例如 Mac mini 上的 Ollama）。
+  PlaudNotesWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PlaudNotesWidgets
+      - path: Shared
+    info:
+      path: PlaudNotesWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Plaud Notes
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        # 必須以 App 的 Bundle ID 開頭；改 App 的 Bundle ID 時要一起改
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.plaudnotes.PlaudNotes.Widgets
   PlaudNotesTests:
     type: bundle.unit-test
     platform: iOS

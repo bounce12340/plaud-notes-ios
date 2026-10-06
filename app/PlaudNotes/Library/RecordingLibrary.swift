@@ -147,9 +147,16 @@ final class RecordingLibrary {
         }
     }
 
-    func add(_ item: RecordingItem) {
+    /// 回傳是否已寫入清單檔。存檔失敗（例如裝置鎖定）時不留在畫面上，
+    /// 讓呼叫端知道要保留原始資料（例如錄音記錄檔）稍後再加。
+    @discardableResult
+    func add(_ item: RecordingItem) -> Bool {
         items.insert(item, at: 0)
-        save()
+        guard save() else {
+            items.removeAll { $0.id == item.id }
+            return false
+        }
+        return true
     }
 
     func delete(_ item: RecordingItem) {
@@ -219,16 +226,19 @@ final class RecordingLibrary {
         }
     }
 
-    private func save() {
+    @discardableResult
+    private func save() -> Bool {
         guard !needsReload else {
             lastError = "裝置鎖定中，暫時無法儲存清單；解鎖後請再試一次。"
-            return
+            return false
         }
         do {
             let data = try JSONEncoder().encode(items)
             try data.write(to: indexURL, options: [.atomic, .completeFileProtection])
+            return true
         } catch {
             lastError = "儲存清單失敗：\(error.localizedDescription)"
+            return false
         }
     }
 }

@@ -23,6 +23,13 @@ struct PlaudNotesApp: App {
         // App 被系統喚醒接收背景轉錄結果時也會走到這裡；BackgroundTranscriber.shared 會重新連上背景 session
         _transcription = State(initialValue: TranscriptionCoordinator(
             transcriber: .shared, library: library, settings: settings, glossary: glossary))
+
+        // 鎖定畫面／動態島的「停止」：鎖定中清單存不了檔，錄音會在解鎖後加入
+        RecordingControl.stop = {
+            Recorder.shared.stop()
+            RecordingRecovery.recover(into: library, skipping: nil)
+        }
+        RecordingActivity.endStale(keeping: Recorder.shared.activeID != nil)
     }
 
     var body: some Scene {
@@ -34,6 +41,12 @@ struct PlaudNotesApp: App {
                 .environment(glossary)
                 .environment(transcription)
                 .environment(Recorder.shared)
+                .onReceive(NotificationCenter.default.publisher(
+                    for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
+                    // 鎖定中停止的錄音，解鎖後加入清單
+                    library.reloadIfNeeded()
+                    RecordingRecovery.recover(into: library, skipping: Recorder.shared.activeID)
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
