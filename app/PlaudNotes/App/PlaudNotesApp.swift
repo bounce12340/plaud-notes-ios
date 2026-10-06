@@ -33,6 +33,7 @@ struct PlaudNotesApp: App {
                 .environment(templates)
                 .environment(glossary)
                 .environment(transcription)
+                .environment(Recorder.shared)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -40,6 +41,8 @@ struct PlaudNotesApp: App {
             library.reloadIfNeeded()
             templates.reloadIfNeeded()
             glossary.reloadIfNeeded()
+            // 上次錄音中途 App 被終止的話，把已錄的部分加回清單
+            RecordingRecovery.recover(into: library, skipping: Recorder.shared.activeID)
             Task { await transcription.processPending() }
         }
     }

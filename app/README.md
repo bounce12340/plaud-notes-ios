@@ -7,7 +7,7 @@
 - 從「檔案」匯入音檔（複製到 App 容器）；Plaud Web 匯出的 MP3 會從檔名「MM-DD」取錄音日期
 - 重新命名、產生筆記後由 AI 建議標題（確認後套用）
 - 筆記串流顯示、依逐字稿建議範本（新增「報告／簡報」）、預設詞庫（台灣藥政法規、簡轉繁常見誤轉）
-- App 內建錄音：AAC M4A、48 kHz 單聲道、背景錄音、暫停／繼續、來電中斷處理
+- App 內建錄音：AAC 48 kHz 單聲道（ADTS .aac，閃退後可救回）、螢幕關閉時持續錄音、暫停／繼續、中斷結束後自動繼續
 - ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示；長音檔從磁碟串流上傳、高位元率大檔先壓成 16 kHz 單聲道 AAC、顯示上傳進度、暫時性失敗自動重送；以系統背景上傳執行，螢幕關閉或 App 被暫停時繼續，完成後通知
 - 逐字稿與筆記分享為 Markdown 或 Word（.docx；自寫 ZIP＋WordprocessingML，無第三方套件）
 - 簡→繁：OpenCC 1.4.2 字典（`PlaudNotes/Resources/OpenCC`，Apache-2.0）
