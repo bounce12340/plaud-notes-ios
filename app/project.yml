@@ -10,6 +10,8 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     DEVELOPMENT_TEAM: ""                     # 在 Xcode 裡選自己的 Team
     CODE_SIGN_STYLE: Automatic
+    # App 與 Share Extension 交換檔案用的 App Group；改 Bundle ID 時一起改（需付費開發者帳號）
+    APP_GROUP_ID: group.com.example.plaudnotes.PlaudNotes
 targets:
   PlaudNotes:
     type: application
@@ -24,6 +26,11 @@ targets:
         type: folder
     dependencies:
       - target: PlaudNotesWidgets
+      - target: PlaudNotesShare
+    entitlements:
+      path: PlaudNotes/PlaudNotes.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
     scheme:
       testTargets: [PlaudNotesTests]
     info:
@@ -35,6 +42,7 @@ targets:
         UIBackgroundModes: [audio]
         # 錄音中在鎖定畫面與動態島顯示時間與停止按鈕
         NSSupportsLiveActivities: true
+        PlaudNotesAppGroup: $(APP_GROUP_ID)
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: false
@@ -58,6 +66,33 @@ targets:
       base:
         # 必須以 App 的 Bundle ID 開頭；改 App 的 Bundle ID 時要一起改
         PRODUCT_BUNDLE_IDENTIFIER: com.example.plaudnotes.PlaudNotes.Widgets
+  PlaudNotesShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PlaudNotesShare
+      - path: Shared/SharedInbox.swift
+    entitlements:
+      path: PlaudNotesShare/PlaudNotesShare.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
+    info:
+      path: PlaudNotesShare/Info.plist
+      properties:
+        CFBundleDisplayName: Plaud Notes
+        PlaudNotesAppGroup: $(APP_GROUP_ID)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            # 只在分享內容含音檔時出現（語音備忘錄、檔案 App、郵件附件等）
+            NSExtensionActivationRule: >-
+              SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $att,
+              ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.audio").@count >= 1).@count >= 1
+    settings:
+      base:
+        # 必須以 App 的 Bundle ID 開頭；改 App 的 Bundle ID 時要一起改
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.plaudnotes.PlaudNotes.Share
   PlaudNotesTests:
     type: bundle.unit-test
     platform: iOS

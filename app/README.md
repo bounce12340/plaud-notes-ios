@@ -4,7 +4,7 @@
 
 ## 已包含
 - 錄音清單（JSON 暫存，之後改 SwiftData）
-- 從「檔案」匯入音檔（複製到 App 容器）；Plaud Web 匯出的 MP3 會從檔名「MM-DD」取錄音日期
+- 從「檔案」匯入音檔（複製到 App 容器），或在語音備忘錄、檔案 App 等的分享面板選「Plaud Notes」（Share Extension）；Plaud Web 匯出的 MP3 會從檔名「MM-DD」取錄音日期
 - 重新命名、產生筆記後由 AI 建議標題（確認後套用）
 - 筆記串流顯示、依逐字稿建議範本（新增「報告／簡報」）、預設詞庫（台灣藥政法規、簡轉繁常見誤轉）
 - App 內建錄音：AAC 48 kHz 單聲道（ADTS .aac，閃退後可救回）、螢幕關閉時持續錄音、暫停／繼續、中斷結束後自動繼續、鎖定畫面與動態島即時動態（錄音時間、停止按鈕）
@@ -16,7 +16,7 @@
 - 單元測試：ElevenLabs 解析、OpenCC 官方案例、LLM 請求／回應、範本與分段、docx 結構與內容、檔名日期、標題建議、MP3 匯入、上傳重送與進度、音檔壓縮
 
 ## 尚未包含
-Share Extension、本機轉錄（WhisperKit／FluidAudio）與其中斷續跑。
+本機轉錄（WhisperKit／FluidAudio）與其中斷續跑。
 
 ## 在 Mac mini 上建置
 ```bash
@@ -25,7 +25,7 @@ cd app
 xcodegen generate        # 依 project.yml 產生 PlaudNotes.xcodeproj
 open PlaudNotes.xcodeproj
 ```
-1. 在 Xcode 的 Signing & Capabilities 選自己的 Team，把 Bundle ID 改成自己的。PlaudNotes 與 PlaudNotesWidgets 兩個 target 都要設定，Widget 的 Bundle ID 必須以 App 的開頭（例如 `你的ID.PlaudNotes.Widgets`）。
+1. 在 Xcode 的 Signing & Capabilities 選自己的 Team，把 Bundle ID 改成自己的。PlaudNotes 與 PlaudNotesWidgets 兩個 target 都要設定，PlaudNotesShare 也一樣。Widget 與 Share 的 Bundle ID 必須以 App 的開頭（例如 `你的ID.PlaudNotes.Widgets`、`你的ID.PlaudNotes.Share`）。Share Extension 透過 App Group 交檔案（需付費開發者帳號）：把 `project.yml` 的 `APP_GROUP_ID` 改成 `group.你的ID.PlaudNotes` 後重新 `xcodegen generate`，並在 PlaudNotes 與 PlaudNotesShare 的 Signing & Capabilities 確認 App Groups 勾選了同一個 ID。
 2. 選 iPhone 17 實機 → Run。
 3. `⌘U` 跑單元測試。
 
