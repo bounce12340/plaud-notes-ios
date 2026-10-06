@@ -10,6 +10,10 @@ on:
         description: "實際呼叫 DeepSeek／Claude／Ollama Cloud／ElevenLabs（需對應的 repo secret；只用虛構逐字稿與合成語音）"
         type: boolean
         default: false
+      only:
+        description: "只跑指定的測試類別（例如 LiveTranscriptionTests）；空白表示全部"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -63,16 +67,23 @@ jobs:
           TEST_RUNNER_ANTHROPIC_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.ANTHROPIC_API_KEY || '' }}
           TEST_RUNNER_OLLAMA_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.OLLAMA_API_KEY || '' }}
           TEST_RUNNER_ELEVENLABS_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_llm) && secrets.ELEVENLABS_API_KEY || '' }}
+          ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
         run: |
           set -o pipefail
+          FILTER=()
+          if [ -n "$ONLY" ]; then FILTER=(-only-testing:"PlaudNotesTests/$ONLY"); fi
+          # 模擬器用 ad-hoc 簽章（同 Xcode 的 Sign to Run Locally）：背景 URLSession 需要 App 有簽章才能辨識
           xcodebuild test \
             -project PlaudNotes.xcodeproj \
             -scheme PlaudNotes \
             -destination "id=${{ steps.sim.outputs.udid }}" \
-            CODE_SIGNING_ALLOWED=NO \
-            | tee build.log | grep -E 'error:|warning: .*Sendable|Test Suite|Executed|BUILD|\*\* |LIVE|COMPACT|skipped' || true
+            "${FILTER[@]}" \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            | tee build.log | grep -E 'error:|warning: .*Sendable|Test Suite|Executed|BUILD|\*\* |LIVE|COMPACT|skipped|nearly matches' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' build.log
       - name: Check sample .docx with macOS textutil
+        # 只跑部分測試時沒有範例檔
+        if: github.event_name != 'workflow_dispatch' || inputs.only == ''
         # DocxExporterTests 會在模擬器的暫存資料夾寫出範例檔；用 macOS 內建的 docx 讀取器再讀一次
         run: |
           set -euo pipefail

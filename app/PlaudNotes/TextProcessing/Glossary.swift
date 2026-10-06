@@ -76,19 +76,40 @@ enum Glossary {
 @Observable
 final class GlossaryStore {
     var text: String {
-        didSet { save() }
+        didSet { if !loading { save() } }
     }
 
     private let url: URL
+    private var loading = false
+    /// 檔案存在但讀不到（螢幕鎖定時被背景喚醒）；解鎖前不可存檔，避免用空白蓋掉詞庫
+    private(set) var needsReload = false
 
     init(url: URL = URL.documentsDirectory.appending(path: "glossary.txt")) {
         self.url = url
-        text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        text = ""
+        load()
     }
 
     var entries: [Glossary.Entry] { Glossary.parse(text) }
 
+    func reloadIfNeeded() {
+        if needsReload { load() }
+    }
+
+    private func load() {
+        loading = true
+        defer { loading = false }
+        guard FileManager.default.fileExists(atPath: url.path) else { needsReload = false; return }
+        do {
+            text = try String(contentsOf: url, encoding: .utf8)
+            needsReload = false
+        } catch {
+            needsReload = true
+        }
+    }
+
     private func save() {
+        guard !needsReload else { return }
         try? Data(text.utf8).write(to: url, options: [.atomic, .completeFileProtection])
     }
 }

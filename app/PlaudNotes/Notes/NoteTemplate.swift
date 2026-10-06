@@ -111,12 +111,29 @@ final class TemplateStore {
         save()
     }
 
+    /// 檔案存在但讀不到（螢幕鎖定時被背景喚醒）；解鎖前不可存檔，避免蓋掉自訂範本
+    private(set) var needsReload = false
+
+    func reloadIfNeeded() {
+        if needsReload { load() }
+    }
+
     private func load() {
-        guard let data = try? Data(contentsOf: url) else { return }
-        custom = ((try? JSONDecoder().decode([NoteTemplate].self, from: data)) ?? []).filter { !$0.isBuiltIn }
+        guard FileManager.default.fileExists(atPath: url.path) else { needsReload = false; return }
+        do {
+            let data = try Data(contentsOf: url)
+            custom = ((try? JSONDecoder().decode([NoteTemplate].self, from: data)) ?? []).filter { !$0.isBuiltIn }
+            needsReload = false
+        } catch {
+            needsReload = true
+        }
     }
 
     private func save() {
+        guard !needsReload else {
+            lastError = "裝置鎖定中，暫時無法儲存範本；解鎖後請再試一次。"
+            return
+        }
         do {
             try JSONEncoder().encode(custom).write(to: url, options: [.atomic, .completeFileProtection])
         } catch {

@@ -6,6 +6,7 @@ struct RecordingDetailView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(TemplateStore.self) private var templates
     @Environment(GlossaryStore.self) private var glossary
+    @Environment(TranscriptionCoordinator.self) private var transcription
     let item: RecordingItem
 
     private enum Tab: String, CaseIterable { case transcript = "逐字稿", notes = "筆記" }
@@ -67,6 +68,9 @@ struct RecordingDetailView: View {
             Button("儲存") { library.rename(id: item.id, title: newTitle) }
         }
         .onAppear(perform: loadSaved)
+        .onChange(of: transcription.transcriptVersion[item.id]) { _, _ in
+            transcript = library.loadTranscript(for: item)
+        }
         .confirmationDialog("音檔會上傳到 ElevenLabs 進行轉錄。", isPresented: $confirmUpload,
                             titleVisibility: .visible) {
             Button("上傳並轉錄") { Task { await transcribe() } }
@@ -111,8 +115,19 @@ struct RecordingDetailView: View {
                 Text("日文").tag("ja")
                 Text("韓文").tag("ko")
             }
-            Button(transcript == nil ? "開始轉錄" : "重新轉錄") { confirmUpload = true }
-                .disabled(busy != nil)
+            if let p = transcription.progress[item.id] {
+                HStack { ProgressView(); Text(p.label) }
+                Text("可以關閉螢幕或切到其他 App，系統會在背景繼續上傳；完成後會通知你。從多工畫面滑掉 App 會中斷上傳。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("取消轉錄", role: .destructive) { Task { await transcription.cancel(item.id) } }
+            } else {
+                Button(transcript == nil ? "開始轉錄" : "重新轉錄") { confirmUpload = true }
+                    .disabled(busy != nil)
+            }
+            if let failure = transcription.failures[item.id] {
+                Text(failure).foregroundStyle(.red)
+                Button("知道了") { transcription.dismissFailure(item.id) }
+            }
             if !glossary.entries.isEmpty {
                 Text("會使用詞庫中的 \(glossary.entries.count) 個專有名詞（ElevenLabs 另收 20% 轉錄費）")
                     .font(.caption).foregroundStyle(.secondary)
@@ -254,32 +269,15 @@ struct RecordingDetailView: View {
         guard let key = KeychainStore.get("elevenlabs"), !key.isEmpty else {
             error = ProviderError.missingAPIKey.localizedDescription; return
         }
-        busy = "準備上傳…"; error = nil
-        // 切到其他 App 時多爭取一點時間（系統通常只給約 30 秒）
+        error = nil
+        // 壓縮與寫出上傳本文在前景進行；切到其他 App 時多爭取一點時間（系統通常只給約 30 秒）
         let background = BackgroundTaskToken(name: "transcribe")
-        defer { busy = nil; background.end() }
+        defer { background.end() }
         do {
-            // 高位元率的大檔先壓縮再傳；用完刪除暫存檔
-            let source = library.url(for: item)
-            let compacted = await AudioCompactor.compactIfNeeded(source) { busy = TranscriptionProgress.compacting($0).label }
-            defer { if let compacted { try? FileManager.default.removeItem(at: compacted) } }
-            let provider = ElevenLabsProvider(apiKey: key)
-            var t = try await provider.transcribe(
-                fileURL: compacted ?? source,
+            try await transcription.start(
+                item: item, apiKey: key,
                 options: TranscriptionOptions(languageCode: language == "auto" ? nil : language,
-                                              keyterms: glossary.entries.map(\.term)),
-                onProgress: { busy = $0.label })
-            t = Glossary.apply(to: t, entries: glossary.entries)
-            // 重新轉錄時保留已設定的說話者名稱
-            t.speakerNames = transcript?.speakerNames
-            if let mode = settings.chineseConversion.mode {
-                busy = "簡→繁轉換中…"
-                t = await Self.convert(t, mode: mode)
-                // 轉換後再套一次更正：詞庫用繁體寫的錯誤寫法，要等轉成繁體後才比對得到
-                t = Glossary.apply(to: t, entries: glossary.entries)
-            }
-            transcript = t
-            library.saveTranscript(t, for: item)
+                                              keyterms: glossary.entries.map(\.term)))
         } catch {
             self.error = error.localizedDescription
         }

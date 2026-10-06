@@ -8,7 +8,7 @@
 - 重新命名、產生筆記後由 AI 建議標題（確認後套用）
 - 筆記串流顯示、依逐字稿建議範本（新增「報告／簡報」）、預設詞庫（台灣藥政法規、簡轉繁常見誤轉）
 - App 內建錄音：AAC M4A、48 kHz 單聲道、背景錄音、暫停／繼續、來電中斷處理
-- ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示；長音檔從磁碟串流上傳、高位元率大檔先壓成 16 kHz 單聲道 AAC、顯示上傳進度、暫時性失敗自動重送
+- ElevenLabs Scribe 轉錄（API key 存 Keychain）、逐字稿顯示；長音檔從磁碟串流上傳、高位元率大檔先壓成 16 kHz 單聲道 AAC、顯示上傳進度、暫時性失敗自動重送；以系統背景上傳執行，螢幕關閉或 App 被暫停時繼續，完成後通知
 - 逐字稿與筆記分享為 Markdown 或 Word（.docx；自寫 ZIP＋WordprocessingML，無第三方套件）
 - 簡→繁：OpenCC 1.4.2 字典（`PlaudNotes/Resources/OpenCC`，Apache-2.0）
 - LLM 筆記：多供應商、可自訂範本、輸出語言（翻譯）、長逐字稿分段
@@ -16,7 +16,7 @@
 - 單元測試：ElevenLabs 解析、OpenCC 官方案例、LLM 請求／回應、範本與分段、docx 結構與內容、檔名日期、標題建議、MP3 匯入、上傳重送與進度、音檔壓縮
 
 ## 尚未包含
-Share Extension、背景上傳（App 長時間在背景時繼續轉錄）、本機轉錄（WhisperKit／FluidAudio）與其中斷續跑。
+Share Extension、本機轉錄（WhisperKit／FluidAudio）與其中斷續跑。
 
 ## 在 Mac mini 上建置
 ```bash

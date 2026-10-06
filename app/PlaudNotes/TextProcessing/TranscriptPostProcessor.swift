@@ -59,3 +59,17 @@ enum TranscriptPostProcessor {
         return hasHan
     }
 }
+
+/// 轉錄結果 → 可存檔的逐字稿：詞庫更正 → 簡轉繁 → 再套一次詞庫（繁體寫的錯誤寫法要轉換後才比對得到），
+/// 並沿用重新轉錄前設定的說話者名稱。
+enum TranscriptPipeline {
+    static func process(_ raw: Transcript, entries: [Glossary.Entry], converter: ChineseConverter?,
+                        speakerNames: [String: String]?) -> Transcript {
+        var t = Glossary.apply(to: raw, entries: entries)
+        t.speakerNames = speakerNames
+        if let converter {
+            t = Glossary.apply(to: TranscriptPostProcessor.process(t, with: converter), entries: entries)
+        }
+        return t
+    }
+}
